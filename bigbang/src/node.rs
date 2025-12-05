@@ -3,7 +3,6 @@ use crate::dimension::Dimension;
 use crate::entity::Entity;
 use crate::utilities::{find_median, max_min_xyz, xyz_distances};
 use serde::{Deserialize, Serialize};
-use crate::CalculateCollisions;
 
 /// This is internal to the tree and is not exposed to the consumer.
 ///
@@ -141,6 +140,12 @@ impl<T: AsEntity + Clone> Node<T> {
         to_return
     }
 
+    /// Returns an iterator over all entities in the tree without cloning them.
+    /// This is a zero-copy alternative to `traverse_tree_helper()`.
+    pub(crate) fn iter(&self) -> NodeIterator<'_, T> {
+        NodeIterator::new(self)
+    }
+
     /// Takes in a mutable slice of entities and creates a recursive 3d tree structure.
     pub(crate) fn new_root_node(pts: &[T], max_entities: i32) -> Node<T> {
         // Start and end are probably 0 and pts.len(), respectively.
@@ -251,7 +256,7 @@ impl<T: AsEntity + Clone> Node<T> {
 /// fields so it is located within the same module as the node itself.
 #[test]
 fn test() {
-    use crate::{collisions::soft_body, Responsive, SimulationResult};
+    use crate::{collisions::soft_body, Responsive, SimulationResult, CalculateCollisions};
     impl Responsive for Entity {
         fn respond(&self, simulation_result: SimulationResult<Self>, time_step: f64) -> Self {
             let mut vx = self.vx;
@@ -330,3 +335,66 @@ fn test() {
     let total_mass = check_vec.iter().fold(0., |acc, x| acc + x.mass);
     assert_eq!(total_mass, tree.root.left.unwrap().total_mass);
 }
+
+/// Zero-copy iterator over entities in a Node tree.
+///
+/// This iterator traverses the tree structure without cloning entities,
+/// yielding references to entities stored in leaf nodes.
+pub(crate) struct NodeIterator<'a, T: AsEntity + Clone> {
+    /// Stack of nodes to visit. We use a Vec as a stack for depth-first traversal.
+    stack: Vec<&'a Node<T>>,
+    /// When we reach a leaf node, we iterate through its entities.
+    current_leaf_iter: Option<std::slice::Iter<'a, T>>,
+}
+
+impl<'a, T: AsEntity + Clone> NodeIterator<'a, T> {
+    pub(crate) fn new(root: &'a Node<T>) -> Self {
+        NodeIterator {
+            stack: vec![root],
+            current_leaf_iter: None,
+        }
+    }
+}
+
+impl<'a, T: AsEntity + Clone> Iterator for NodeIterator<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // If we're currently iterating through a leaf node's entities, continue doing so
+        if let Some(ref mut leaf_iter) = self.current_leaf_iter {
+            if let Some(entity) = leaf_iter.next() {
+                return Some(entity);
+            } else {
+                // Finished with this leaf, clear it
+                self.current_leaf_iter = None;
+            }
+        }
+
+        // Process nodes from the stack
+        while let Some(node) = self.stack.pop() {
+            // If this node has points, it's a leaf - start iterating through them
+            if let Some(ref points) = node.points {
+                let mut iter = points.iter();
+                // Get the first entity (if any) and store the iterator for subsequent calls
+                if let Some(entity) = iter.next() {
+                    self.current_leaf_iter = Some(iter);
+                    return Some(entity);
+                }
+                // If points is empty, continue to next node
+                continue;
+            }
+
+            // Internal node - push children onto stack (right first, then left for DFS order)
+            if let Some(ref right) = node.right {
+                self.stack.push(right);
+            }
+            if let Some(ref left) = node.left {
+                self.stack.push(left);
+            }
+        }
+
+        // No more nodes or entities
+        None
+    }
+}
+

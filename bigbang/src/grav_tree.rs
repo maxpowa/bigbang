@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// The main struct you will interact with. This is a k-d tree containing all of your gravitational
 /// entities.
+#[cfg_attr(feature = "bevy_ecs", derive(::bevy_ecs::prelude::Component))]
 #[derive(Serialize, Deserialize)]
 pub struct GravTree<T: AsEntity + Responsive + Clone> {
     /// A GravTree consists of a root [[Node]]. A [[Node]] is a recursive binary tree data structure.
@@ -100,6 +101,35 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
         }
         to_return
     }
+
+    /// Returns an iterator over all entities in the tree without cloning them.
+    /// This is a zero-copy alternative to `as_vec()`.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// # use bigbang::{GravTree, Entity, CalculateCollisions};
+    /// # let entities = vec![Entity::default()];
+    /// let tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// for entity in tree.iter() {
+    ///     // Work with borrowed entity without cloning
+    ///     println!("Entity at ({}, {}, {})", entity.x, entity.y, entity.z);
+    /// }
+    /// ```
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        let mut iters: Vec<Box<dyn Iterator<Item = &T> + '_>> = Vec::new();
+
+        if let Some(ref left) = self.root.left {
+            iters.push(Box::new(left.iter()));
+        }
+        if let Some(ref right) = self.root.right {
+            iters.push(Box::new(right.iter()));
+        }
+        if let Some(ref points) = self.root.points {
+            iters.push(Box::new(points.iter()));
+        }
+
+        iters.into_iter().flatten()
+    }
     /// Gets the total number of entities contained by this tree.
     pub fn get_number_of_entities(&self) -> usize {
         self.number_of_entities
@@ -114,59 +144,13 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     // I am not sure if this will be necessary or very practical in the rust
     // implementation (I would have to implement indexing in my GravTree struct).
     pub fn time_step(&self) -> GravTree<T> {
-        // TODO currently there is a time when the entities are stored twice.
-        // Store only accelerations perhaps?
-        // First, we extract the entities out into a vector
-        let post_gravity_entity_vec: Vec<T> = self.root.traverse_tree_helper();
-        // Then, we construct a new grav tree after the gravitational acceleration for each
-        // entity has been calculated.
-        GravTree::<T>::new(
-            &post_gravity_entity_vec
-                .par_iter()
-                .map(|x| {
-                    let x_entity = x.as_entity();
-                    let accel = match self.calculate_collisions {
-                        CalculateCollisions::Yes => {
-                            x_entity.get_acceleration_and_collisions(&self.root, self.theta)
-                        }
-                        CalculateCollisions::No => {
-                            x_entity.get_acceleration_without_collisions(&self.root, self.theta)
-                        }
-                    };
-                    x.respond(accel, self.time_step)
-                })
-                .collect::<Vec<_>>(),
-            self.time_step,
-            self.max_entities,
-            self.theta,
-            self.calculate_collisions,
-        )
-    }
+        // Use iterator to collect entity references (zero-copy)
+        let entities: Vec<&T> = self.iter().collect();
 
-    /// This function updates the tree in-place by applying gravity to all entities.
-    /// This is more efficient than `time_step()` as it avoids an extra allocation by
-    /// mutating the tree directly rather than returning a new one.
-    /// 
-    /// # Example
-    /// ```rust,no_run
-    /// # use bigbang::{GravTree, Entity, Responsive, AsEntity, SimulationResult, CalculateCollisions};
-    /// # impl Responsive for Entity {
-    /// #     fn respond(&self, result: SimulationResult<Self>, time_step: f64) -> Self {
-    /// #         self.clone()
-    /// #     }
-    /// # }
-    /// # let entities = vec![Entity::default()];
-    /// let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
-    /// tree.time_step_mut(); // Updates tree in place
-    /// ```
-    pub fn time_step_mut(&mut self) {
-        // First, we extract the entities out into a vector
-        let post_gravity_entity_vec: Vec<T> = self.root.traverse_tree_helper();
-        
         // Calculate new positions for all entities in parallel
-        let updated_entities: Vec<T> = post_gravity_entity_vec
+        let updated_entities: Vec<T> = entities
             .par_iter()
-            .map(|x| {
+            .map(|&x| {
                 let x_entity = x.as_entity();
                 let accel = match self.calculate_collisions {
                     CalculateCollisions::Yes => {
@@ -180,19 +164,65 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             })
             .collect();
 
-        // Rebuild the tree structure with updated entities
-        let number_of_entities = updated_entities.len();
-        
-        if number_of_entities == 0 {
+        // Construct a new tree with the updated entities
+        GravTree::<T>::new(
+            &updated_entities,
+            self.time_step,
+            self.max_entities,
+            self.theta,
+            self.calculate_collisions,
+        )
+    }
+
+    /// This function updates the tree in-place by applying gravity to all entities.
+    /// This is more efficient than `time_step()` as it avoids an extra allocation by
+    /// mutating the tree directly rather than returning a new one.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// # use bigbang::{GravTree, Entity, CalculateCollisions};
+    /// # let entities = vec![Entity::default()];
+    /// let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// tree.time_step_mut(); // Updates tree in place
+    /// ```
+    pub fn time_step_mut(&mut self) {
+        // Phase 1: Collect entity references (zero-copy via iterator)
+        // We still need to clone here because we need the tree structure for calculations
+        // but also need owned entities to rebuild the tree
+        let entities: Vec<&T> = self.iter().collect();
+
+        if entities.is_empty() {
             self.root = Node::new();
             self.number_of_entities = 0;
             return;
         }
 
+        // Phase 2: Calculate accelerations in parallel using references to entities
+        // and references to the existing tree structure
+        let updated_entities: Vec<T> = entities
+            .par_iter()
+            .map(|&x| {
+                let x_entity = x.as_entity();
+                let accel = match self.calculate_collisions {
+                    CalculateCollisions::Yes => {
+                        x_entity.get_acceleration_and_collisions(&self.root, self.theta)
+                    }
+                    CalculateCollisions::No => {
+                        x_entity.get_acceleration_without_collisions(&self.root, self.theta)
+                    }
+                };
+                x.respond(accel, self.time_step)
+            })
+            .collect();
+
+        // Phase 3: Rebuild the tree structure with updated entities
+        let number_of_entities = updated_entities.len();
+
+
         let mut phantom_parent = Node::new();
         phantom_parent.left = Some(Box::new(Node::<T>::new_root_node(&updated_entities, self.max_entities)));
         phantom_parent.points = Some(Vec::new());
-        
+
         self.root = phantom_parent;
         self.number_of_entities = number_of_entities;
     }

@@ -9,4 +9,16 @@ pub trait Responsive {
     fn respond(&self, simulation_result: SimulationResult<Self>, time_step: f64) -> Self
     where
         Self: std::marker::Sized;
+
+    /// Respond to the forces in-place, mutating the entity directly.
+    /// This is more efficient than `respond()` as it avoids allocating a new entity.
+    /// 
+    /// The default implementation calls `respond()` and assigns the result,
+    /// but you can override this for better performance.
+    fn respond_mut(&mut self, simulation_result: SimulationResult<Self>, time_step: f64)
+    where
+        Self: std::marker::Sized + Clone,
+    {
+        *self = self.respond(simulation_result, time_step);
+    }
 }
