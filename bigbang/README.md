@@ -80,9 +80,28 @@ let grav_tree = GravTree::new(&my_vec, 0.2);
 
 ```
 
-The _time\_step_ coefficient is later passed into `respond()`. It can be used to effectively control the granularity of the simulation, i.e. how much each simulation frame actually impacts the movement of the entities. A smaller _time\_step_ will result in a more granular, more precise simulation. You'll probably have to play around with the constants a little bit to find something ideal for your use case. In order to advance the simulation, call `grav_tree.time_step()`. 
+The _time\_step_ coefficient is later passed into `respond()`. It can be used to effectively control the granularity of the simulation, i.e. how much each simulation frame actually impacts the movement of the entities. A smaller _time\_step_ will result in a more granular, more precise simulation. You'll probably have to play around with the constants a little bit to find something ideal for your use case. 
 
-See the examples directory for a minimalist working example.
+## Advancing the Simulation
+There are two ways to advance the simulation:
+
+### Immutable Time Step
+Call `grav_tree.time_step()` to get a new tree with the simulation advanced by one time step:
+```rust
+let tree = GravTree::new(&my_vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
+let next_tree = tree.time_step(); // Returns a new GravTree
+```
+
+### Mutable Time Step (More Efficient)
+Call `grav_tree.time_step_mut()` to update the tree in-place. This is more efficient as it avoids an extra allocation:
+```rust
+let mut tree = GravTree::new(&my_vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
+tree.time_step_mut(); // Updates tree in place
+```
+
+The mutable version is recommended for better performance, especially in long-running simulations.
+
+See the examples directory for minimalist working examples.
 
 # C/C++ Interface
 There used to be a robust C/C++ interface for this library, but it was difficult to maintain with rapid API changes during development. If you were using this FFI, and would like for it to be re-introduced, please [contact me](mailto:alex@alex-hansen.com) and I will help you set it up. Otherwise, FFI is on hold until this crate stabilizes.

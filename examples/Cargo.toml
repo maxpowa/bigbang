@@ -8,5 +8,9 @@ edition = "2024"
 name = "basic_simulation"
 path = "src/basic_simulation/main.rs"
 
+[[bin]]
+name = "basic_simulation_mut"
+path = "src/basic_simulation_mut/main.rs"
+
 [dependencies]
 bigbang = { path = "../bigbang" }

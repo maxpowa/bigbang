@@ -142,4 +142,58 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             self.calculate_collisions,
         )
     }
+
+    /// This function updates the tree in-place by applying gravity to all entities.
+    /// This is more efficient than `time_step()` as it avoids an extra allocation by
+    /// mutating the tree directly rather than returning a new one.
+    /// 
+    /// # Example
+    /// ```rust,no_run
+    /// # use bigbang::{GravTree, Entity, Responsive, AsEntity, SimulationResult, CalculateCollisions};
+    /// # impl Responsive for Entity {
+    /// #     fn respond(&self, result: SimulationResult<Self>, time_step: f64) -> Self {
+    /// #         self.clone()
+    /// #     }
+    /// # }
+    /// # let entities = vec![Entity::default()];
+    /// let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// tree.time_step_mut(); // Updates tree in place
+    /// ```
+    pub fn time_step_mut(&mut self) {
+        // First, we extract the entities out into a vector
+        let post_gravity_entity_vec: Vec<T> = self.root.traverse_tree_helper();
+        
+        // Calculate new positions for all entities in parallel
+        let updated_entities: Vec<T> = post_gravity_entity_vec
+            .par_iter()
+            .map(|x| {
+                let x_entity = x.as_entity();
+                let accel = match self.calculate_collisions {
+                    CalculateCollisions::Yes => {
+                        x_entity.get_acceleration_and_collisions(&self.root, self.theta)
+                    }
+                    CalculateCollisions::No => {
+                        x_entity.get_acceleration_without_collisions(&self.root, self.theta)
+                    }
+                };
+                x.respond(accel, self.time_step)
+            })
+            .collect();
+
+        // Rebuild the tree structure with updated entities
+        let number_of_entities = updated_entities.len();
+        
+        if number_of_entities == 0 {
+            self.root = Node::new();
+            self.number_of_entities = 0;
+            return;
+        }
+
+        let mut phantom_parent = Node::new();
+        phantom_parent.left = Some(Box::new(Node::<T>::new_root_node(&updated_entities, self.max_entities)));
+        phantom_parent.points = Some(Vec::new());
+        
+        self.root = phantom_parent;
+        self.number_of_entities = number_of_entities;
+    }
 }

@@ -102,3 +102,57 @@ fn test_time_step() {
     let after_time_step = test_tree.time_step();
     assert_eq!(after_time_step.as_vec().len(), 1000);
 }
+
+#[test]
+fn test_time_step_mut() {
+    let mut vec_that_wants_to_be_a_kdtree: Vec<MyEntity> = Vec::new();
+    for _ in 0..1000 {
+        let entity = MyEntity::random_entity();
+        vec_that_wants_to_be_a_kdtree.push(entity);
+    }
+
+    let mut test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    test_tree.time_step_mut();
+    assert_eq!(test_tree.as_vec().len(), 1000);
+    assert_eq!(test_tree.get_number_of_entities(), 1000);
+}
+
+#[test]
+fn test_time_step_consistency() {
+    // Verify that time_step_mut produces the same results as time_step
+    let mut vec: Vec<MyEntity> = Vec::new();
+    for i in 0..100 {
+        vec.push(MyEntity {
+            x: (i as f64) * 2.0,
+            y: (i as f64) * 2.0,
+            z: (i as f64) * 2.0,
+            vx: 0.1,
+            vy: 0.1,
+            vz: 0.1,
+            radius: 1.0,
+        });
+    }
+
+    let tree1 = GravTree::new(&vec, 0.2, 3, 0.2, CalculateCollisions::No);
+    let tree2 = GravTree::new(&vec, 0.2, 3, 0.2, CalculateCollisions::No);
+
+    // Using immutable time_step
+    let result1 = tree1.time_step();
+    let entities1 = result1.as_vec();
+
+    // Using mutable time_step_mut
+    let mut tree2_mut = tree2;
+    tree2_mut.time_step_mut();
+    let entities2 = tree2_mut.as_vec();
+
+    // Both should have the same number of entities
+    assert_eq!(entities1.len(), entities2.len());
+    assert_eq!(result1.get_number_of_entities(), tree2_mut.get_number_of_entities());
+
+    // The positions should be approximately the same
+    // (We can't do exact equality due to potential floating point differences in tree traversal order)
+    let sum_x1: f64 = entities1.iter().map(|e| e.x).sum();
+    let sum_x2: f64 = entities2.iter().map(|e| e.x).sum();
+    assert!((sum_x1 - sum_x2).abs() < 0.001, "X positions differ: {} vs {}", sum_x1, sum_x2);
+}
+
