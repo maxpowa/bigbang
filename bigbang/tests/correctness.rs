@@ -6,7 +6,7 @@
 // The issue probably arises when the total number of entities is less than max_pts?
 
 extern crate bigbang;
-use bigbang::{collisions::soft_body, AsEntity, Entity, GravTree, Responsive, SimulationResult};
+use bigbang::{collisions::soft_body, AsEntity, CalculateCollisions, GravTree, Responsive, SimulationResult};
 
 #[derive(Clone, PartialEq, AsEntity)]
 struct MyEntity {
@@ -77,7 +77,7 @@ fn two_entities_collision() {
         MyEntity::new(0., 0., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2);
+    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().as_vec();
 
     // Each entity should have collided with exactly one other entity
@@ -93,7 +93,7 @@ fn two_entities_no_collision() {
         MyEntity::new(0., 0., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2);
+    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().as_vec();
 
     assert_eq!(after_time_step[0].collided_with.len(), 0);
@@ -108,7 +108,7 @@ fn two_entities_accel() {
         MyEntity::new(50., 0., 1., 10., 500.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2);
+    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
     let _after_time_step = test_tree.time_step().time_step().as_vec();
 
     // 1.0 isn't right but it should at least not be 0, what the current test is suggesting
@@ -155,7 +155,7 @@ fn five_entities_collision() {
         MyEntity::new(0., 1., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2);
+    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().as_vec();
 
     // Each entity should have collided with exactly all four other entities
@@ -177,22 +177,26 @@ fn five_entities_accel() {
         MyEntity::new(50., 100., 1., 10., 500.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2);
+    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().time_step().as_vec();
 
-    assert_eq!(after_time_step[0].vx, 234.62426718543517);
-    assert_eq!(after_time_step[0].vy, -308.1666357163429);
-    assert_eq!(after_time_step[0].vz, 6.374453794316003);
+    assert_eq!(after_time_step[0].vx, 0.15431299859147837);
+    assert_eq!(after_time_step[0].vy, -0.09585586271461218);
+    assert_eq!(after_time_step[0].vz, 0.0035439741313927063);
 
-    assert_eq!(after_time_step[1].vx, -728.0140671441542);
-    assert_eq!(after_time_step[1].vy, 961.0687440357227);
-    assert_eq!(after_time_step[1].vz, -22.318277419464977);
+    assert_eq!(after_time_step[1].vx, -0.13582446094615622);
+    assert_eq!(after_time_step[1].vy, 0.8512257874024887);
+    assert_eq!(after_time_step[1].vz, -0.000021554920561577058);
 
-    assert_eq!(after_time_step[2].vx, 68.99261434517841);
-    assert_eq!(after_time_step[2].vy, 202.1872542350379);
-    assert_eq!(after_time_step[2].vz, 0.28488247914098197);
+    assert_eq!(after_time_step[2].vx, -0.18949313172952317);
+    assert_eq!(after_time_step[2].vy, -0.7019795056879561);
+    assert_eq!(after_time_step[2].vz, -0.000035662286878477935);
 
-    assert_eq!(after_time_step[3].vx, -232.853993009126);
-    assert_eq!(after_time_step[3].vy, 189.20383841899522);
-    assert_eq!(after_time_step[3].vz, -2.014092604958015);
+    assert_eq!(after_time_step[3].vx, 0.3386640864203134);
+    assert_eq!(after_time_step[3].vy, -0.02923599470394115);
+    assert_eq!(after_time_step[3].vz, -0.00005721416764760718);
+
+    assert_eq!(after_time_step[4].vx, -0.028777793603781895);
+    assert_eq!(after_time_step[4].vy, -0.11042470073913033);
+    assert_eq!(after_time_step[4].vz, -0.00023996603805160843);
 }

@@ -124,7 +124,7 @@ impl Entity {
             return (0., 0., 0.);
         }
         let d_vector = self.distance_vector(&other);
-        let d_mag_cubed = d_magnitude * d_magnitude; // TODO cube this
+        let d_mag_cubed = d_magnitude * d_magnitude * d_magnitude;
         let d_over_d_cubed = (
             d_vector.0 / d_mag_cubed,
             d_vector.1 / d_mag_cubed,
@@ -211,9 +211,9 @@ impl Entity {
         SimulationResult {
             collisions,
             gravitational_acceleration: (
-                acceleration.0 + acceleration.0,
-                acceleration.1 + acceleration.1,
-                acceleration.2 + acceleration.2,
+                acceleration.0,
+                acceleration.1,
+                acceleration.2,
             ),
         }
     }
@@ -276,9 +276,9 @@ impl Entity {
         SimulationResult {
             collisions: vec![],
             gravitational_acceleration: (
-                acceleration.0 + acceleration.0,
-                acceleration.1 + acceleration.1,
-                acceleration.2 + acceleration.2,
+                acceleration.0,
+                acceleration.1,
+                acceleration.2,
             ),
         }
     }

@@ -3,6 +3,7 @@ use crate::dimension::Dimension;
 use crate::entity::Entity;
 use crate::utilities::{find_median, max_min_xyz, xyz_distances};
 use serde::{Deserialize, Serialize};
+use crate::CalculateCollisions;
 
 /// This is internal to the tree and is not exposed to the consumer.
 ///
@@ -294,7 +295,7 @@ fn test() {
     }
 
     let check_vec = test_vec.clone();
-    let tree = crate::GravTree::new(&test_vec, 0.2, 3, 0.2);
+    let tree = crate::GravTree::new(&test_vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let root_node = tree.root.clone();
 
     let mut nodes: Vec<Node<Entity>> = Vec::new();
