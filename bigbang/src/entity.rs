@@ -1,6 +1,6 @@
 use either::{Either, Left, Right};
 
-use super::Dimension;
+use super::{Dimension, Responsive};
 use crate::as_entity::AsEntity;
 use crate::simulation_result::SimulationResult;
 use crate::Node;
@@ -49,7 +49,102 @@ impl PartialEq for Entity {
     }
 }
 
+impl Responsive for Entity {
+    fn respond(&self, simulation_result: SimulationResult<Entity>, time_step: f64) -> Self {
+        let mut new_entity = self.clone();
+        new_entity.respond_mut(simulation_result, time_step);
+        new_entity
+    }
+
+    fn respond_mut(&mut self, simulation_result: SimulationResult<Entity>, time_step: f64) {
+        let (ax, ay, az) = simulation_result.gravitational_acceleration;
+        let self_mass = self.mass;
+
+        // Handle collisions with proper 3D elastic collision physics
+        for other in simulation_result.collisions.iter() {
+            let other_mass = other.mass;
+
+            // Calculate collision normal vector (from self to other)
+            let dx = other.x - self.x;
+            let dy = other.y - self.y;
+            let dz = other.z - self.z;
+            let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+
+            if dist < 1e-10 {
+                continue;
+            }
+
+            let nx = dx / dist;
+            let ny = dy / dist;
+            let nz = dz / dist;
+
+            // Project velocities onto collision normal
+            let v1n = self.vx * nx + self.vy * ny + self.vz * nz;
+            let v2n = other.vx * nx + other.vy * ny + other.vz * nz;
+
+            // Apply 1D elastic collision formula to normal component
+            let mass_sum = self_mass + other_mass;
+            let v1n_new = ((self_mass - other_mass) * v1n + 2.0 * other_mass * v2n) / mass_sum;
+
+            let delta_vn = v1n_new - v1n;
+
+            // Update velocity in place
+            self.vx += delta_vn * nx;
+            self.vy += delta_vn * ny;
+            self.vz += delta_vn * nz;
+        }
+
+        // Velocity Verlet integration - mutate in place
+        let vx_half = self.vx + 0.5 * ax * time_step;
+        let vy_half = self.vy + 0.5 * ay * time_step;
+        let vz_half = self.vz + 0.5 * az * time_step;
+
+        self.x += vx_half * time_step;
+        self.y += vy_half * time_step;
+        self.z += vz_half * time_step;
+
+        self.vx = vx_half + 0.5 * ax * time_step;
+        self.vy = vy_half + 0.5 * ay * time_step;
+        self.vz = vz_half + 0.5 * az * time_step;
+    }
+}
+
 impl Entity {
+
+    pub fn from_pos_radius_mass(
+        x: f64,
+        y: f64,
+        z: f64,
+        radius: f64,
+        mass: f64,
+    ) -> Self {
+        Entity {
+            vx: 0.,
+            vy: 0.,
+            vz: 0.,
+            x,
+            y,
+            z,
+            radius,
+            mass,
+        }
+    }
+
+    /// Creates a new entity from position and radius, with zero velocity.
+    /// Mass is calculated as radius * 1000.
+    pub fn from_pos_radius(x: f64, y: f64, z: f64, radius: f64) -> Self {
+        Entity {
+            vx: 0.,
+            vy: 0.,
+            vz: 0.,
+            x,
+            y,
+            z,
+            radius,
+            mass: radius * 1000.,
+        }
+    }
+
     /// Needs to be reworked to use min/max position values, but it naively checks
     /// if two things collide right now.
     fn did_collide_into(&self, other: &Entity) -> bool {
