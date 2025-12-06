@@ -44,9 +44,9 @@ impl Responsive for MyEntity {
         let mut vz = self.vz;
         let mut collided_with = Vec::new();
         let (mut ax, mut ay, mut az) = simulation_result.gravitational_acceleration;
-        for other in simulation_result.collisions {
-            collided_with.push(other.clone());
-            let (collision_ax, collision_ay, collision_az) = soft_body(self, other, 50f64);
+        for other in simulation_result.collisions.iter() {
+            collided_with.push((*other).clone());
+            let (collision_ax, collision_ay, collision_az) = soft_body(self, *other, 50f64);
             ax += collision_ax;
             ay += collision_ay;
             az += collision_az;
