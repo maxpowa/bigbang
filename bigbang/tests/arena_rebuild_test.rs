@@ -1,4 +1,4 @@
-﻿extern crate bigbang;
+extern crate bigbang;
 use bigbang::{AsEntity, CalculateCollisions, Entity, GravTree, Responsive, SimulationResult};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -63,7 +63,7 @@ fn test_tree_rebuild_on_consecutive_steps() {
         TestEntity { x: 0.0, y: 10.0, z: 0.0, vx: 1.0, vy: 0.0, vz: 0.0, mass: 1.0, radius: 0.1 },
     ];
 
-    let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
 
     // First time step - tree is fresh, no rebuild needed
     let initial_entities = tree.as_vec();
@@ -94,7 +94,7 @@ fn test_explicit_rebuild() {
         TestEntity { x: 10.0, y: 0.0, z: 0.0, vx: 0.0, vy: 1.0, vz: 0.0, mass: 1.0, radius: 0.1 },
     ];
 
-    let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
 
     // Manually modify entities to make tree stale
     tree.time_step_mut();
@@ -121,14 +121,14 @@ fn test_time_step_vs_time_step_mut_with_multiple_steps() {
     ];
 
     // Method 1: Using time_step (creates new trees)
-    let mut tree1 = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    let mut tree1 = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
     tree1 = tree1.time_step();
     tree1 = tree1.time_step();
     tree1 = tree1.time_step();
     let result1 = tree1.as_vec();
 
     // Method 2: Using time_step_mut (modifies in place)
-    let mut tree2 = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    let mut tree2 = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
     tree2.time_step_mut();
     tree2.time_step_mut();
     tree2.time_step_mut();

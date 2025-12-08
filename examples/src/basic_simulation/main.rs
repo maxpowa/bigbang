@@ -73,7 +73,7 @@ fn main() {
         });
     }
 
-    let mut test_tree = GravTree::new(
+    let mut test_tree = GravTree::with_default_parallel_threshold(
         &mut vec_that_wants_to_be_a_kdtree,
         0.2,
         3,

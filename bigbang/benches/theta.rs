@@ -80,7 +80,7 @@ fn initialize_tree(number_of_particles: usize, theta: f64) -> GravTree<MyEntity>
     let max_entities = 3;
     let time_step = 0.2;
     let mut data = initialize_data(number_of_particles);
-    GravTree::new(&mut data, time_step, max_entities, theta, CalculateCollisions::No)
+    GravTree::with_default_parallel_threshold(&mut data, time_step, max_entities, theta, CalculateCollisions::No)
 }
 
 // Theta isn't used in tree construction so it isn't varied in the benches
@@ -89,14 +89,14 @@ fn tree_construction(c: &mut Criterion) {
     group.bench_function("n=125", |b| {
         b.iter_batched(
             || initialize_data(125),
-            |mut data| GravTree::new(&mut data, 0.2, 3, 0.2, CalculateCollisions::No),
+            |mut data| GravTree::with_default_parallel_threshold(&mut data, 0.2, 3, 0.2, CalculateCollisions::No),
             BatchSize::SmallInput,
         )
     });
     group.bench_function("n=2000", |b| {
         b.iter_batched(
             || initialize_data(2000),
-            |mut data| GravTree::new(&mut data, 0.2, 3, 0.2, CalculateCollisions::No),
+            |mut data| GravTree::with_default_parallel_threshold(&mut data, 0.2, 3, 0.2, CalculateCollisions::No),
             BatchSize::SmallInput,
         )
     });
@@ -104,7 +104,7 @@ fn tree_construction(c: &mut Criterion) {
     group.bench_function("n=20_000", |b| {
         b.iter_batched(
             || initialize_data(20_000),
-            |mut data| GravTree::new(&mut data, 0.2, 3, 0.2, CalculateCollisions::No),
+            |mut data| GravTree::with_default_parallel_threshold(&mut data, 0.2, 3, 0.2, CalculateCollisions::No),
             BatchSize::SmallInput,
         )
     });

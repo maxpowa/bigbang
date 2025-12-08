@@ -6,6 +6,18 @@ use serde::{Deserialize, Serialize};
 
 /// The main struct you will interact with. This is a k-d tree containing all of your gravitational
 /// entities.
+///
+/// # Parallelism
+///
+/// This implementation leverages extensive parallelism via Rayon for maximum performance:
+///
+/// - **Tree Construction**: Left and right subtrees are built in parallel (via `rayon::join`)
+/// - **Entity Conversion**: The initial `as_entity()` conversion uses `par_iter` for large datasets
+/// - **Time Stepping**: All entity acceleration calculations run in parallel (via `par_iter`)
+/// - **Velocity/Position Updates**: All entity mutations run in parallel
+///
+/// For best performance, ensure you have sufficient CPU cores and consider the dataset size.
+/// Parallelism automatically scales with available cores and has minimal overhead for small datasets.
 #[cfg_attr(feature = "bevy_ecs", derive(::bevy_ecs::prelude::Component))]
 #[derive(Serialize, Deserialize)]
 #[must_use]
@@ -39,15 +51,34 @@ pub struct GravTree<T: AsEntity + Responsive + Clone> {
     /// Tracks if the tree structure is stale and needs rebuilding.
     /// Set to true after time_step_mut modifies entities in place.
     tree_needs_rebuild: bool,
+    /// Threshold for parallel tree construction. Subtrees with fewer entities than this
+    /// will be built sequentially to avoid parallelization overhead.
+    /// Default: 100. Increase for simpler entity types, decrease for complex types.
+    parallel_threshold: usize,
 }
 
+/// Default threshold for parallel tree construction.
+/// Subtrees with fewer entities than this will be built sequentially.
+pub const DEFAULT_PARALLEL_THRESHOLD: usize = 100;
+
 impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
+    /// Create a new GravTree with all parameters specified, including parallel_threshold.
+    /// 
+    /// # Parameters
+    /// - `pts`: The entities to add to the tree
+    /// - `time_step`: The time coefficient for simulation frames
+    /// - `max_entities`: Maximum entities per leaf node
+    /// - `theta`: Distance threshold for approximation (lower = more accurate, slower)
+    /// - `calculate_collisions`: Whether to detect collisions
+    /// - `parallel_threshold`: Subtrees with fewer entities than this will be built sequentially
+    ///   (default: 100, increase for simple types, decrease for complex types)
     pub fn new(
         pts: &[T],
         time_step: f64,
         max_entities: i32,
         theta: f64,
         calculate_collisions: CalculateCollisions,
+        parallel_threshold: usize,
     ) -> GravTree<T>
     where
         T: AsEntity,
@@ -64,6 +95,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
                 theta,
                 calculate_collisions,
                 tree_needs_rebuild: false,
+                parallel_threshold,
             };
         }
 
@@ -76,7 +108,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
         // and can be made more elegant in the future, if need be.
         // The real root of the tree is therefore tree.root.left
         let mut phantom_parent = Node::new();
-        phantom_parent.left = Some(Box::new(Node::new_root_node(&entities, max_entities)));
+        phantom_parent.left = Some(Box::new(Node::new_root_node(&entities, max_entities, parallel_threshold)));
         phantom_parent.point_indices = Some(Vec::new());
 
         GravTree {
@@ -88,8 +120,27 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             theta,
             calculate_collisions,
             tree_needs_rebuild: false,
+            parallel_threshold,
         }
     }
+
+    /// Create a new GravTree with default parallel threshold.
+    /// 
+    /// This is a convenience method that uses `DEFAULT_PARALLEL_THRESHOLD` (100).
+    /// For more control over parallel performance, use `new()` directly.
+    pub fn with_default_parallel_threshold(
+        pts: &[T],
+        time_step: f64,
+        max_entities: i32,
+        theta: f64,
+        calculate_collisions: CalculateCollisions,
+    ) -> GravTree<T>
+    where
+        T: AsEntity,
+    {
+        Self::new(pts, time_step, max_entities, theta, calculate_collisions, DEFAULT_PARALLEL_THRESHOLD)
+    }
+
     /// Sets the `theta` value of the simulation.
     pub fn set_theta(&mut self, theta: f64) {
         self.theta = theta;
@@ -140,6 +191,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
                 self.max_entities,
                 self.theta,
                 self.calculate_collisions,
+                self.parallel_threshold,
             );
         }
 
@@ -167,6 +219,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             self.max_entities,
             self.theta,
             self.calculate_collisions,
+            self.parallel_threshold,
         )
     }
 
@@ -263,7 +316,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
         }
 
         let mut phantom_parent = Node::new();
-        phantom_parent.left = Some(Box::new(Node::new_root_node(&self.entities, self.max_entities)));
+        phantom_parent.left = Some(Box::new(Node::new_root_node(&self.entities, self.max_entities, self.parallel_threshold)));
         phantom_parent.point_indices = Some(Vec::new());
 
         self.root = phantom_parent;

@@ -103,7 +103,7 @@ fn test_traversal() {
         vec.push(entity);
     }
     let vec_clone = vec.clone();
-    let tree = GravTree::new(&vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let tree = GravTree::with_default_parallel_threshold(&vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let traversed_vec = tree.as_vec();
     let mut all_found = true;
     for i in vec_clone {
@@ -123,7 +123,7 @@ fn test_time_step() {
         vec_that_wants_to_be_a_kdtree.push(entity);
     }
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step();
     assert_eq!(after_time_step.as_vec().len(), 1000);
 }
@@ -136,7 +136,7 @@ fn test_time_step_mut() {
         vec_that_wants_to_be_a_kdtree.push(entity);
     }
 
-    let mut test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let mut test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     test_tree.time_step_mut();
     assert_eq!(test_tree.as_vec().len(), 1000);
     assert_eq!(test_tree.get_number_of_entities(), 1000);
@@ -158,8 +158,8 @@ fn test_time_step_consistency() {
         });
     }
 
-    let tree1 = GravTree::new(&vec, 0.2, 3, 0.2, CalculateCollisions::No);
-    let tree2 = GravTree::new(&vec, 0.2, 3, 0.2, CalculateCollisions::No);
+    let tree1 = GravTree::with_default_parallel_threshold(&vec, 0.2, 3, 0.2, CalculateCollisions::No);
+    let tree2 = GravTree::with_default_parallel_threshold(&vec, 0.2, 3, 0.2, CalculateCollisions::No);
 
     // Using immutable time_step
     let result1 = tree1.time_step();

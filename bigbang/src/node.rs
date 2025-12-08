@@ -151,20 +151,30 @@ impl Node {
 
     /// Takes in a slice of entities and creates a recursive 3d tree structure using indices.
     /// This is the public API that maintains backward compatibility.
-    pub(crate) fn new_root_node<T: AsEntity + Clone>(entities: &[T], max_entities: i32) -> Node {
+    ///
+    /// # Parameters
+    /// - `parallel_threshold`: Subtrees with fewer entities than this will be built sequentially
+    pub(crate) fn new_root_node<T: AsEntity + Clone + Send + Sync>(entities: &[T], max_entities: i32, parallel_threshold: usize) -> Node {
+        use rayon::prelude::*;
         // OPTIMIZATION: Convert all entities once at top level to avoid O(n*depth) conversions
-        let entities_as_entities: Vec<Entity> = entities.iter().map(|e| e.as_entity()).collect();
+        // Use parallel iteration for large datasets
+        let entities_as_entities: Vec<Entity> = if entities.len() > (parallel_threshold*10) {
+            entities.par_iter().map(|e| e.as_entity()).collect()
+        } else {
+            entities.iter().map(|e| e.as_entity()).collect()
+        };
         let indices: Vec<usize> = (0..entities.len()).collect();
-        Self::new_root_node_with_indices(entities, &entities_as_entities, &indices, max_entities)
+        Self::new_root_node_with_indices(entities, &entities_as_entities, &indices, max_entities, parallel_threshold)
     }
 
     /// Internal implementation using indices for arena pattern.
     /// Pre-converted entities passed to avoid repeated as_entity() calls.
-    fn new_root_node_with_indices<T: AsEntity + Clone>(
+    fn new_root_node_with_indices<T: AsEntity + Clone + Send + Sync>(
         entities: &[T],
         entities_as_entities: &[Entity],
         indices: &[usize],
         max_entities: i32,
+        parallel_threshold: usize,
     ) -> Node {
         use crate::utilities::{partition_indices_by_median, xyz_distances_indexed, max_min_xyz_indexed};
 
@@ -236,8 +246,21 @@ impl Node {
             // KEY CHANGE: Split indices, not entities!
             let (below_indices, above_indices) = mut_indices.split_at(split_index);
 
-            let left = Self::new_root_node_with_indices(entities, entities_as_entities, below_indices, max_entities);
-            let right = Self::new_root_node_with_indices(entities, entities_as_entities, above_indices, max_entities);
+            // PARALLEL TREE CONSTRUCTION: Build left and right subtrees in parallel
+            // This provides significant speedup for large datasets as tree construction
+            // is embarrassingly parallel - each subtree is completely independent.
+            // Use a threshold to avoid overhead for small subtrees.
+            let (left, right) = if indices.len() > parallel_threshold {
+                let (below_vec, above_vec) = (below_indices.to_vec(), above_indices.to_vec());
+                rayon::join(
+                    || Self::new_root_node_with_indices(entities, entities_as_entities, &below_vec, max_entities, parallel_threshold),
+                    || Self::new_root_node_with_indices(entities, entities_as_entities, &above_vec, max_entities, parallel_threshold),
+                )
+            } else {
+                let left = Self::new_root_node_with_indices(entities, entities_as_entities, below_indices, max_entities, parallel_threshold);
+                let right = Self::new_root_node_with_indices(entities, entities_as_entities, above_indices, max_entities, parallel_threshold);
+                (left, right)
+            };
 
             // The center of mass is a recursive definition
             let left_mass = left.total_mass;
@@ -287,7 +310,7 @@ fn test() {
     }
 
     let check_vec = test_vec.clone();
-    let tree = crate::GravTree::new(&test_vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let tree = crate::GravTree::with_default_parallel_threshold(&test_vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let root_node = tree.root.clone();
 
     let mut nodes: Vec<Node> = Vec::new();

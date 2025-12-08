@@ -1,4 +1,4 @@
-﻿extern crate bigbang;
+extern crate bigbang;
 use bigbang::{AsEntity, GravTree, Responsive, SimulationResult};
 
 #[derive(Clone, PartialEq)]
@@ -74,7 +74,7 @@ fn main() {
     }
 
     // Create a mutable tree for in-place updates
-    let mut test_tree = GravTree::new(
+    let mut test_tree = GravTree::with_default_parallel_threshold(
         &mut vec_that_wants_to_be_a_kdtree,
         0.2,
         3,

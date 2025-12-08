@@ -1,4 +1,4 @@
-﻿extern crate bigbang;
+extern crate bigbang;
 use bigbang::{CalculateCollisions, Entity, GravTree};
 
 /// Test proper 3D elastic collision physics
@@ -28,7 +28,7 @@ fn test_head_on_elastic_collision() {
         },
     ];
 
-    let tree = GravTree::new(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
+    let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
     let result = tree.time_step();
     let final_entities = result.as_vec();
 
@@ -72,7 +72,7 @@ fn test_glancing_collision_preserves_tangential_velocity() {
         },
     ];
 
-    let tree = GravTree::new(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
+    let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
     let initial = tree.as_vec();
     let result = tree.time_step();
     let final_entities = result.as_vec();
@@ -116,7 +116,7 @@ fn test_uses_actual_mass_not_radius() {
         },
     ];
 
-    let tree = GravTree::new(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
+    let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
     let result = tree.time_step();
     let final_entities = result.as_vec();
 
@@ -165,7 +165,7 @@ fn test_collision_physics_no_clone() {
         },
     ];
 
-    let tree = GravTree::new(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
+    let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
 
     // This should use .iter() not .clone() - just verify it runs without panic
     let result = tree.time_step();
@@ -198,7 +198,7 @@ fn test_momentum_conservation_in_collision() {
         },
     ];
 
-    let tree = GravTree::new(&entities, 0.001, 3, 0.5, CalculateCollisions::Yes);  // Small timestep
+    let tree = GravTree::with_default_parallel_threshold(&entities, 0.001, 3, 0.5, CalculateCollisions::Yes);  // Small timestep
     let initial = tree.as_vec();
     let result = tree.time_step();
     let final_entities = result.as_vec();
