@@ -193,7 +193,7 @@ impl Entity {
 
     /// Returns a boolean representing whether or node the node is within the theta range
     /// of the entity.
-    fn theta_exceeded<T: AsEntity + Clone>(&self, node: &Node<T>, theta: f64) -> bool {
+    fn theta_exceeded(&self, node: &Node, theta: f64) -> bool {
         // 1) distance from entity to COM of that node
         // 2) if 1) * theta > size (max diff) then
         // This frequently makes a node with NaN positions
@@ -207,7 +207,7 @@ impl Entity {
     /// self. Other can be either an entity or a node.
     fn get_gravitational_acceleration<T: AsEntity + Clone>(
         &self,
-        oth: Either<&Entity, &Node<T>>,
+        oth: Either<&Entity, &Node>,
     ) -> (f64, f64, f64) {
         // TODO get rid of this clone
         let other = match oth {
@@ -241,33 +241,36 @@ impl Entity {
     /// acceleration from it.
     pub(crate) fn get_acceleration_and_collisions<'a, T: AsEntity + Clone>(
         &'a self,
-        node: &'a Node<T>,
+        node: &'a Node,
+        arena: &'a [T],
         theta: f64,
     ) -> SimulationResult<T> {
         let mut collisions = Vec::new();
         let mut acceleration = (0., 0., 0.);
         if let Some(node) = &node.left {
-            if node.points.is_some() {
-                // if this node has some points, calculate their gravitational acceleration
-                for i in node.points.as_ref().expect("unexpected null node 2") {
-                    if self.did_collide_into(&i.as_entity()) {
-                        collisions.push(i);
+            if node.point_indices.is_some() {
+                // if this node has some point_indices, calculate their gravitational acceleration
+                let indices = node.point_indices.as_ref().expect("unexpected null node 2");
+                for &idx in indices {
+                    let other = &arena[idx];
+                    if self.did_collide_into(&other.as_entity()) {
+                        collisions.push(other);
                     }
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(i.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
                 }
             } else if self.theta_exceeded(node, theta) {
                 // otherwise, if theta is exceeded, calculate the entire node as a big boi particle
-                let tmp_accel = self.get_gravitational_acceleration(Right(node));
+                let tmp_accel = self.get_gravitational_acceleration::<Entity>(Right(node));
                 acceleration.0 += tmp_accel.0;
                 acceleration.1 += tmp_accel.1;
                 acceleration.2 += tmp_accel.2;
             } else {
                 // otherwise, theta has not been exceeded and this is not a leaf. recurse
-                let mut res = self.get_acceleration_and_collisions(node, theta);
+                let mut res = self.get_acceleration_and_collisions(node, arena, theta);
                 let tmp_accel = res.gravitational_acceleration;
                 collisions.append(&mut res.collisions);
                 acceleration.0 += tmp_accel.0;
@@ -276,27 +279,29 @@ impl Entity {
             }
         };
         if let Some(node) = &node.right {
-            if node.points.is_some() {
+            if node.point_indices.is_some() {
                 // same logic as above
-                for i in node.points.as_ref().expect("unexpected null node 2") {
-                    if self.did_collide_into(&i.as_entity()) {
-                        collisions.push(i);
+                let indices = node.point_indices.as_ref().expect("unexpected null node 2");
+                for &idx in indices {
+                    let other = &arena[idx];
+                    if self.did_collide_into(&other.as_entity()) {
+                        collisions.push(other);
                     }
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(i.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
                 }
             } else if self.theta_exceeded(node, theta) {
                 // otherwise, if theta is exceeded, calculate the entire node as a big boi particle
-                let tmp_accel = self.get_gravitational_acceleration(Right(node));
+                let tmp_accel = self.get_gravitational_acceleration::<Entity>(Right(node));
                 acceleration.0 += tmp_accel.0;
                 acceleration.1 += tmp_accel.1;
                 acceleration.2 += tmp_accel.2;
             } else {
                 // otherwise, theta has not been exceeded and this is not a leaf. recurse
-                let mut res = self.get_acceleration_and_collisions(node, theta);
+                let mut res = self.get_acceleration_and_collisions(node, arena, theta);
                 let tmp_accel = res.gravitational_acceleration;
                 collisions.append(&mut res.collisions);
                 acceleration.0 += tmp_accel.0;
@@ -315,29 +320,32 @@ impl Entity {
     }
     pub(crate) fn get_acceleration_without_collisions<'a, T: AsEntity + Clone>(
         &'a self,
-        node: &'a Node<T>,
+        node: &'a Node,
+        arena: &'a [T],
         theta: f64,
     ) -> SimulationResult<T> {
         let mut acceleration = (0., 0., 0.);
         if let Some(node) = &node.left {
-            if node.points.is_some() {
-                // if this node has some points, calculate their gravitational acceleration
-                for i in node.points.as_ref().expect("unexpected null node 2") {
+            if node.point_indices.is_some() {
+                // if this node has some point_indices, calculate their gravitational acceleration
+                let indices = node.point_indices.as_ref().expect("unexpected null node 2");
+                for &idx in indices {
+                    let other = &arena[idx];
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(i.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
                 }
             } else if self.theta_exceeded(node, theta) {
                 // otherwise, if theta is exceeded, calculate the entire node as a big boi particle
-                let tmp_accel = self.get_gravitational_acceleration(Right(node));
+                let tmp_accel = self.get_gravitational_acceleration::<Entity>(Right(node));
                 acceleration.0 += tmp_accel.0;
                 acceleration.1 += tmp_accel.1;
                 acceleration.2 += tmp_accel.2;
             } else {
                 // otherwise, theta has not been exceeded and this is not a leaf. recurse
-                let res = self.get_acceleration_without_collisions(node, theta);
+                let res = self.get_acceleration_without_collisions(node, arena, theta);
                 let tmp_accel = res.gravitational_acceleration;
                 acceleration.0 += tmp_accel.0;
                 acceleration.1 += tmp_accel.1;
@@ -345,24 +353,26 @@ impl Entity {
             }
         };
         if let Some(node) = &node.right {
-            if node.points.is_some() {
+            if node.point_indices.is_some() {
                 // same logic as above
-                for i in node.points.as_ref().expect("unexpected null node 2") {
+                let indices = node.point_indices.as_ref().expect("unexpected null node 2");
+                for &idx in indices {
+                    let other = &arena[idx];
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(i.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
                 }
             } else if self.theta_exceeded(node, theta) {
                 // otherwise, if theta is exceeded, calculate the entire node as a big boi particle
-                let tmp_accel = self.get_gravitational_acceleration(Right(node));
+                let tmp_accel = self.get_gravitational_acceleration::<Entity>(Right(node));
                 acceleration.0 += tmp_accel.0;
                 acceleration.1 += tmp_accel.1;
                 acceleration.2 += tmp_accel.2;
             } else {
                 // otherwise, theta has not been exceeded and this is not a leaf. recurse
-                let res = self.get_acceleration_without_collisions(node, theta);
+                let res = self.get_acceleration_without_collisions(node, arena, theta);
                 let tmp_accel = res.gravitational_acceleration;
                 acceleration.0 += tmp_accel.0;
                 acceleration.1 += tmp_accel.1;

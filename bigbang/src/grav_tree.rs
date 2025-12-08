@@ -13,7 +13,7 @@ pub struct GravTree<T: AsEntity + Responsive + Clone> {
     /// A GravTree consists of a root [[Node]]. A [[Node]] is a recursive binary tree data structure.
     /// Tragically must be public for now for testing reasons. Perhaps could be replaced by various
     /// getter methods later.
-    pub(crate) root: Node<T>,
+    pub(crate) root: Node,
     /// Arena storage: entities stored in a contiguous flat array for cache-efficient access
     /// and zero-copy mutations. The tree structure references these entities.
     entities: Vec<T>,
@@ -76,8 +76,8 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
         // and can be made more elegant in the future, if need be.
         // The real root of the tree is therefore tree.root.left
         let mut phantom_parent = Node::new();
-        phantom_parent.left = Some(Box::new(Node::<T>::new_root_node(&entities, max_entities)));
-        phantom_parent.points = Some(Vec::new());
+        phantom_parent.left = Some(Box::new(Node::new_root_node(&entities, max_entities)));
+        phantom_parent.point_indices = Some(Vec::new());
 
         GravTree {
             root: phantom_parent,
@@ -150,10 +150,10 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
                 let entity_as_entity = entity.as_entity();
                 let accel = match self.calculate_collisions {
                     CalculateCollisions::Yes => {
-                        entity_as_entity.get_acceleration_and_collisions(&self.root, self.theta)
+                        entity_as_entity.get_acceleration_and_collisions(&self.root, &self.entities, self.theta)
                     }
                     CalculateCollisions::No => {
-                        entity_as_entity.get_acceleration_without_collisions(&self.root, self.theta)
+                        entity_as_entity.get_acceleration_without_collisions(&self.root, &self.entities, self.theta)
                     }
                 };
                 entity.respond(accel, self.time_step)
@@ -209,10 +209,10 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
                 let entity_as_entity = entity.as_entity();
                 let result = match self.calculate_collisions {
                     CalculateCollisions::Yes => {
-                        entity_as_entity.get_acceleration_and_collisions(&self.root, self.theta)
+                        entity_as_entity.get_acceleration_and_collisions(&self.root, &self.entities, self.theta)
                     }
                     CalculateCollisions::No => {
-                        entity_as_entity.get_acceleration_without_collisions(&self.root, self.theta)
+                        entity_as_entity.get_acceleration_without_collisions(&self.root, &self.entities, self.theta)
                     }
                 };
                 result.gravitational_acceleration
@@ -257,14 +257,14 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     pub fn rebuild_tree(&mut self) {
         if self.entities.is_empty() {
             self.root = Node::new();
-            self.root.points = Some(Vec::new());
+            self.root.point_indices = Some(Vec::new());
             self.tree_needs_rebuild = false;
             return;
         }
 
         let mut phantom_parent = Node::new();
-        phantom_parent.left = Some(Box::new(Node::<T>::new_root_node(&self.entities, self.max_entities)));
-        phantom_parent.points = Some(Vec::new());
+        phantom_parent.left = Some(Box::new(Node::new_root_node(&self.entities, self.max_entities)));
+        phantom_parent.point_indices = Some(Vec::new());
 
         self.root = phantom_parent;
         self.tree_needs_rebuild = false;

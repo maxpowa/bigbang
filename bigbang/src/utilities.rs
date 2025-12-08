@@ -51,6 +51,71 @@ pub(crate) fn find_median(dim: Dimension, pts: &mut [Entity]) -> (&f64, usize) {
     find_median_helper(dim, pts, 0, pts.len(), pts.len() / 2usize)
 }
 
+/// Partitions indices based on median of dimension without mutating entities.
+/// Returns (median_value, split_index) where indices[..split_index] < median.
+/// The indices slice is reordered to match the partitioning.
+pub(crate) fn partition_indices_by_median(
+    dim: Dimension,
+    entities: &[Entity],
+    indices: &mut [usize],
+) -> (f64, usize) {
+    if indices.is_empty() {
+        return (0.0, 0);
+    }
+
+    let mid = indices.len() / 2;
+    partition_indices_helper(dim, entities, indices, 0, indices.len(), mid)
+}
+
+fn partition_indices_helper(
+    dim: Dimension,
+    entities: &[Entity],
+    indices: &mut [usize],
+    start: usize,
+    end: usize,
+    mid: usize,
+) -> (f64, usize) {
+    // Base case: empty range
+    if start >= end {
+        let idx = if start < indices.len() { start } else { indices.len() - 1 };
+        return (*entities[indices[idx]].get_dim(&dim), idx);
+    }
+
+    let mut low = start + 1;
+    let mut high = if end > 0 { end - 1 } else { 0 }; // exclusive end, so end-1 is the last valid index
+
+    // Partition: elements < pivot go left, >= pivot go right
+    while low <= high {
+        // Critical: check bounds before dereferencing
+        if low >= end {
+            break;
+        }
+
+        if entities[indices[low]].get_dim(&dim) < entities[indices[start]].get_dim(&dim) {
+            low += 1;
+        } else {
+            indices.swap(low, high);
+            if high == 0 {
+                break;
+            }
+            high -= 1;
+        }
+    }
+
+    // Place pivot in correct position
+    if high < indices.len() {
+        indices.swap(start, high);
+    }
+
+    if high == mid {
+        (*entities[indices[high]].get_dim(&dim), high)
+    } else if high < mid {
+        partition_indices_helper(dim, entities, indices, high + 1, end, mid)
+    } else {
+        partition_indices_helper(dim, entities, indices, start, high, mid)
+    }
+}
+
 fn find_median_helper(
     dim: Dimension,
     pts: &mut [Entity],
@@ -58,8 +123,8 @@ fn find_median_helper(
     end: usize,
     mid: usize,
 ) -> (&f64, usize) {
-    let mut low = (start + 1);
-    let mut high = (end - 1); //exclusive end
+    let mut low = start + 1;
+    let mut high = end - 1; //exclusive end
     while low <= high {
         if pts[low].get_dim(&dim) < pts[start].get_dim(&dim) {
             low += 1;

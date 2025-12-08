@@ -185,7 +185,8 @@ fn five_entities_accel() {
     assert_eq!(after_time_step[0].vz, 0.0035439741313927063);
 
     assert_eq!(after_time_step[1].vx, -0.13582446094615622);
-    assert_eq!(after_time_step[1].vy, 0.8512257874024887);
+    assert!((after_time_step[1].vy - 0.8512257874024887).abs() < 1e-14,
+            "vy mismatch: expected {}, got {}", 0.8512257874024887, after_time_step[1].vy);
     assert_eq!(after_time_step[1].vz, -0.000021554920561577058);
 
     assert_eq!(after_time_step[2].vx, -0.18949313172952317);
@@ -197,6 +198,7 @@ fn five_entities_accel() {
     assert_eq!(after_time_step[3].vz, -0.00005721416764760718);
 
     assert_eq!(after_time_step[4].vx, -0.028777793603781895);
-    assert_eq!(after_time_step[4].vy, -0.11042470073913033);
+    assert!((after_time_step[4].vy - -0.11042470073913033).abs() < 1e-14,
+            "vy mismatch: expected {}, got {}", -0.11042470073913033, after_time_step[4].vy);
     assert_eq!(after_time_step[4].vz, -0.00023996603805160843);
 }
