@@ -2,6 +2,34 @@ use super::Dimension;
 #[allow(unused_imports)]
 use crate::entity::Entity;
 use std::cmp::Ordering;
+
+/// Returns the absolute distance in every dimension (the range in every dimension)
+/// using indices into an entity array (optimized to avoid cloning).
+pub(crate) fn xyz_distances_indexed(entities: &[Entity], indices: &[usize]) -> (f64, f64, f64) {
+    if indices.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+    
+    let mut x_min = entities[indices[0]].x;
+    let mut x_max = x_min;
+    let mut y_min = entities[indices[0]].y;
+    let mut y_max = y_min;
+    let mut z_min = entities[indices[0]].z;
+    let mut z_max = z_min;
+    
+    for &idx in &indices[1..] {
+        let e = &entities[idx];
+        x_min = x_min.min(e.x);
+        x_max = x_max.max(e.x);
+        y_min = y_min.min(e.y);
+        y_max = y_max.max(e.y);
+        z_min = z_min.min(e.z);
+        z_max = z_max.max(e.z);
+    }
+    
+    ((x_max - x_min).abs(), (y_max - y_min).abs(), (z_max - z_min).abs())
+}
+
 /// Returns the absolute distance in every dimension (the range in every dimension)
 /// of an array slice of entities.
 pub(crate) fn xyz_distances(entities: &[Entity]) -> (f64, f64, f64) {
@@ -10,6 +38,33 @@ pub(crate) fn xyz_distances(entities: &[Entity]) -> (f64, f64, f64) {
     let y_distance = y_max - y_min;
     let z_distance = z_max - z_min;
     (x_distance.abs(), y_distance.abs(), z_distance.abs())
+}
+
+/// Returns max/min values using indices (optimized to avoid cloning).
+pub(crate) fn max_min_xyz_indexed(entities: &[Entity], indices: &[usize]) -> (f64, f64, f64, f64, f64, f64) {
+    if indices.is_empty() {
+        return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+    
+    let first = &entities[indices[0]];
+    let mut x_min = first.x;
+    let mut x_max = first.x;
+    let mut y_min = first.y;
+    let mut y_max = first.y;
+    let mut z_min = first.z;
+    let mut z_max = first.z;
+    
+    for &idx in &indices[1..] {
+        let e = &entities[idx];
+        x_min = x_min.min(e.x);
+        x_max = x_max.max(e.x);
+        y_min = y_min.min(e.y);
+        y_max = y_max.max(e.y);
+        z_min = z_min.min(e.z);
+        z_max = z_max.max(e.z);
+    }
+    
+    (x_max, x_min, y_max, y_min, z_max, z_min)
 }
 
 /// Given an array slice of entities, returns the maximum and minimum x, y, and z values as

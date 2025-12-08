@@ -1,7 +1,6 @@
 use crate::as_entity::AsEntity;
 use crate::dimension::Dimension;
 use crate::entity::Entity;
-use crate::utilities::{max_min_xyz, xyz_distances};
 use serde::{Deserialize, Serialize};
 
 /// This is internal to the tree and is not exposed to the consumer.
@@ -153,30 +152,27 @@ impl Node {
     /// Takes in a slice of entities and creates a recursive 3d tree structure using indices.
     /// This is the public API that maintains backward compatibility.
     pub(crate) fn new_root_node<T: AsEntity + Clone>(entities: &[T], max_entities: i32) -> Node {
+        // OPTIMIZATION: Convert all entities once at top level to avoid O(n*depth) conversions
+        let entities_as_entities: Vec<Entity> = entities.iter().map(|e| e.as_entity()).collect();
         let indices: Vec<usize> = (0..entities.len()).collect();
-        Self::new_root_node_with_indices(entities, &indices, max_entities)
+        Self::new_root_node_with_indices(entities, &entities_as_entities, &indices, max_entities)
     }
 
     /// Internal implementation using indices for arena pattern.
+    /// Pre-converted entities passed to avoid repeated as_entity() calls.
     fn new_root_node_with_indices<T: AsEntity + Clone>(
         entities: &[T],
+        entities_as_entities: &[Entity],
         indices: &[usize],
         max_entities: i32,
     ) -> Node {
-        use crate::utilities::partition_indices_by_median;
+        use crate::utilities::{partition_indices_by_median, xyz_distances_indexed, max_min_xyz_indexed};
 
         let length_of_points = indices.len() as i32;
 
-        // Build Entity array for distance calculation and bounds (only for indexed entities)
-        let entity_vec: Vec<Entity> = indices
-            .iter()
-            .map(|&idx| entities[idx].as_entity())
-            .collect();
+        // OPTIMIZATION: Use indexed access to avoid cloning entities
+        let (xdistance, ydistance, zdistance) = xyz_distances_indexed(entities_as_entities, indices);
 
-        let (xdistance, ydistance, zdistance) = xyz_distances(&entity_vec);
-
-        // Build full entities array for partitioning (indices reference this array)
-        let entities_as_entities: Vec<Entity> = entities.iter().map(|e| e.as_entity()).collect();
 
         // If our current collection is small enough to become a leaf
         if length_of_points <= max_entities {
@@ -184,7 +180,7 @@ impl Node {
             let (x_total, y_total, z_total, max_radius, total_mass) = indices
                 .iter()
                 .fold((0.0, 0.0, 0.0, 0.0, 0.0), |acc, &idx| {
-                    let pt = entities[idx].as_entity();
+                    let pt = &entities_as_entities[idx];
                     (
                         acc.0 + (pt.x * pt.mass),
                         acc.1 + (pt.y * pt.mass),
@@ -194,7 +190,7 @@ impl Node {
                     )
                 });
 
-            let (x_max, x_min, y_max, y_min, z_max, z_min) = max_min_xyz(&entity_vec);
+            let (x_max, x_min, y_max, y_min, z_max, z_min) = max_min_xyz_indexed(entities_as_entities, indices);
 
             Node {
                 center_of_mass: (
@@ -209,12 +205,12 @@ impl Node {
                 right: None,
                 split_dimension: None,
                 split_value: 0.0,
-                x_max: *x_max,
-                x_min: *x_min,
-                y_max: *y_max,
-                y_min: *y_min,
-                z_max: *z_max,
-                z_min: *z_min,
+                x_max,
+                x_min,
+                y_max,
+                y_min,
+                z_max,
+                z_min,
             }
         } else {
             // INTERNAL NODE - partition indices
@@ -240,8 +236,8 @@ impl Node {
             // KEY CHANGE: Split indices, not entities!
             let (below_indices, above_indices) = mut_indices.split_at(split_index);
 
-            let left = Self::new_root_node_with_indices(entities, below_indices, max_entities);
-            let right = Self::new_root_node_with_indices(entities, above_indices, max_entities);
+            let left = Self::new_root_node_with_indices(entities, entities_as_entities, below_indices, max_entities);
+            let right = Self::new_root_node_with_indices(entities, entities_as_entities, above_indices, max_entities);
 
             // The center of mass is a recursive definition
             let left_mass = left.total_mass;

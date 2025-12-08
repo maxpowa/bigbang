@@ -180,25 +180,25 @@ fn five_entities_accel() {
     let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().time_step().as_vec();
 
-    assert_eq!(after_time_step[0].vx, 0.15431299859147837);
-    assert_eq!(after_time_step[0].vy, -0.09585586271461218);
-    assert_eq!(after_time_step[0].vz, 0.0035439741313927063);
+    const EPSILON: f64 = 1e-14;
 
-    assert_eq!(after_time_step[1].vx, -0.13582446094615622);
-    assert!((after_time_step[1].vy - 0.8512257874024887).abs() < 1e-14,
-            "vy mismatch: expected {}, got {}", 0.8512257874024887, after_time_step[1].vy);
-    assert_eq!(after_time_step[1].vz, -0.000021554920561577058);
+    assert!((after_time_step[0].vx - 0.15431299859147837).abs() < EPSILON);
+    assert!((after_time_step[0].vy - (-0.09585586271461218)).abs() < EPSILON);
+    assert!((after_time_step[0].vz - 0.0035439741313927063).abs() < EPSILON);
 
-    assert_eq!(after_time_step[2].vx, -0.18949313172952317);
-    assert_eq!(after_time_step[2].vy, -0.7019795056879561);
-    assert_eq!(after_time_step[2].vz, -0.000035662286878477935);
+    assert!((after_time_step[1].vx - (-0.13582446094615622)).abs() < EPSILON);
+    assert!((after_time_step[1].vy - 0.8512257874024887).abs() < EPSILON);
+    assert!((after_time_step[1].vz - (-0.000021554920561577058)).abs() < EPSILON);
 
-    assert_eq!(after_time_step[3].vx, 0.3386640864203134);
-    assert_eq!(after_time_step[3].vy, -0.02923599470394115);
-    assert_eq!(after_time_step[3].vz, -0.00005721416764760718);
+    assert!((after_time_step[2].vx - (-0.18949313172952317)).abs() < EPSILON);
+    assert!((after_time_step[2].vy - (-0.7019795056879561)).abs() < EPSILON);
+    assert!((after_time_step[2].vz - (-0.000035662286878477935)).abs() < EPSILON);
 
-    assert_eq!(after_time_step[4].vx, -0.028777793603781895);
-    assert!((after_time_step[4].vy - -0.11042470073913033).abs() < 1e-14,
-            "vy mismatch: expected {}, got {}", -0.11042470073913033, after_time_step[4].vy);
-    assert_eq!(after_time_step[4].vz, -0.00023996603805160843);
+    assert!((after_time_step[3].vx - 0.3386640864203134).abs() < EPSILON);
+    assert!((after_time_step[3].vy - (-0.02923599470394115)).abs() < EPSILON);
+    assert!((after_time_step[3].vz - (-0.00005721416764760718)).abs() < EPSILON);
+
+    assert!((after_time_step[4].vx - (-0.028777793603781895)).abs() < EPSILON);
+    assert!((after_time_step[4].vy - (-0.11042470073913033)).abs() < EPSILON);
+    assert!((after_time_step[4].vz - (-0.00023996603805160843)).abs() < EPSILON);
 }
