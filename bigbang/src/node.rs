@@ -39,6 +39,7 @@ pub(crate) struct Node {
 }
 
 impl Node {
+    #[inline]
     pub(crate) fn new() -> Node {
         Node {
             split_dimension: None,
@@ -59,6 +60,7 @@ impl Node {
     }
     /// Looks into its own children's maximum and minimum values, setting its own
     /// values accordingly.
+    #[inline]
     pub(crate) fn set_max_mins(&mut self) {
         let xmin = f64::min(
             self.left.as_ref().unwrap().x_min,
@@ -97,6 +99,7 @@ impl Node {
     // Used when treating a node as the sum of its parts in gravity calculations.
     /// Converts a node into an entity with the x, y, z, and mass being derived from the center of
     /// mass and the total mass of the entities it contains.
+    #[inline]
     pub(crate) fn as_entity(&self) -> Entity {
         // Construct a "super radius" of the largest dimension / 2 + a radius.
         let (range_x, range_y, range_z) = (
@@ -119,6 +122,7 @@ impl Node {
         }
     }
 
+    #[inline]
     pub(crate) fn max_distance(&self) -> f64 {
         let x_distance = self.x_max - self.x_min;
         let y_distance = self.y_max - self.y_min;
@@ -145,6 +149,7 @@ impl Node {
 
     /// Returns an iterator over all entities in the tree without cloning them.
     /// This is a zero-copy alternative to `traverse_tree_helper()`.
+    #[inline]
     pub(crate) fn iter<'a, T: AsEntity + Clone>(&'a self, arena: &'a [T]) -> NodeIterator<'a, T> {
         NodeIterator::new(self, arena)
     }
@@ -154,7 +159,7 @@ impl Node {
     ///
     /// # Parameters
     /// - `parallel_threshold`: Subtrees with fewer entities than this will be built sequentially
-    pub(crate) fn new_root_node<T: AsEntity + Clone + Send + Sync>(entities: &[T], max_entities: i32, parallel_threshold: usize) -> Node {
+    pub(crate) fn new_root_node<T: AsEntity + Clone + Send + Sync>(entities: &[T], max_entities: usize, parallel_threshold: usize) -> Node {
         use rayon::prelude::*;
         // OPTIMIZATION: Convert all entities once at top level to avoid O(n*depth) conversions
         // Use parallel iteration for large datasets
@@ -173,19 +178,17 @@ impl Node {
         entities: &[T],
         entities_as_entities: &[Entity],
         indices: &[usize],
-        max_entities: i32,
+        max_entities: usize,
         parallel_threshold: usize,
     ) -> Node {
         use crate::utilities::{partition_indices_by_median, xyz_distances_indexed, max_min_xyz_indexed};
-
-        let length_of_points = indices.len() as i32;
 
         // OPTIMIZATION: Use indexed access to avoid cloning entities
         let (xdistance, ydistance, zdistance) = xyz_distances_indexed(entities_as_entities, indices);
 
 
         // If our current collection is small enough to become a leaf
-        if length_of_points <= max_entities {
+        if indices.len() <= max_entities {
             // LEAF NODE - store indices only!
             let (x_total, y_total, z_total, max_radius, total_mass) = indices
                 .iter()
@@ -310,7 +313,7 @@ fn test() {
     }
 
     let check_vec = test_vec.clone();
-    let tree = crate::GravTree::with_default_parallel_threshold(&test_vec, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let tree = crate::GravTree::with_default_parallel_threshold(&test_vec, 0.2, 3usize, 0.2, CalculateCollisions::Yes);
     let root_node = tree.root.clone();
 
     let mut nodes: Vec<Node> = Vec::new();
@@ -360,6 +363,7 @@ pub(crate) struct NodeIterator<'a, T: AsEntity + Clone> {
 }
 
 impl<'a, T: AsEntity + Clone> NodeIterator<'a, T> {
+    #[inline]
     pub(crate) fn new(root: &'a Node, arena: &'a [T]) -> Self {
         NodeIterator {
             stack: vec![root],
@@ -372,6 +376,7 @@ impl<'a, T: AsEntity + Clone> NodeIterator<'a, T> {
 impl<'a, T: AsEntity + Clone> Iterator for NodeIterator<'a, T> {
     type Item = &'a T;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         // If we're currently iterating through a leaf node's indices, continue doing so
         if let Some(ref mut leaf_iter) = self.current_leaf_iter {
@@ -410,4 +415,3 @@ impl<'a, T: AsEntity + Clone> Iterator for NodeIterator<'a, T> {
         None
     }
 }
-

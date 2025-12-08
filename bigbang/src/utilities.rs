@@ -41,6 +41,7 @@ pub(crate) fn xyz_distances(entities: &[Entity]) -> (f64, f64, f64) {
 }
 
 /// Returns max/min values using indices (optimized to avoid cloning).
+#[inline]
 pub(crate) fn max_min_xyz_indexed(entities: &[Entity], indices: &[usize]) -> (f64, f64, f64, f64, f64, f64) {
     if indices.is_empty() {
         return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);

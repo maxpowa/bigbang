@@ -29,16 +29,13 @@ pub struct GravTree<T: AsEntity + Responsive + Clone> {
     /// Arena storage: entities stored in a contiguous flat array for cache-efficient access
     /// and zero-copy mutations. The tree structure references these entities.
     entities: Vec<T>,
-    /// This is just the number of entities in the tree. This is used in testing to verify that no
-    /// entities are being dropped.
-    number_of_entities: usize,
     /// This coefficient determines the granularity of the simulation, i.e. how much each frame of
     /// the simulation actually moves the individual entities.
     time_step: f64, // the time coefficient; how large each simulation frame is time-wise.
     /// The maximum number of entities to be contained within any leaf node. Defaults to 3 but is
     /// configurable. This is _not_ the maximum number of entities in the simulation. A higher
     /// number here will result in lower simulation granularity.
-    max_entities: i32,
+    max_entities: usize,
     /// `theta` is how far away a node has to be before the simulation starts approximating its
     /// contained entities by treating them as one large node instead of individually addressing
     /// them.
@@ -63,7 +60,7 @@ pub const DEFAULT_PARALLEL_THRESHOLD: usize = 100;
 
 impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     /// Create a new GravTree with all parameters specified, including parallel_threshold.
-    /// 
+    ///
     /// # Parameters
     /// - `pts`: The entities to add to the tree
     /// - `time_step`: The time coefficient for simulation frames
@@ -75,7 +72,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     pub fn new(
         pts: &[T],
         time_step: f64,
-        max_entities: i32,
+        max_entities: usize,
         theta: f64,
         calculate_collisions: CalculateCollisions,
         parallel_threshold: usize,
@@ -83,13 +80,11 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     where
         T: AsEntity,
     {
-        let size_of_vec = pts.len();
         // Handle the case where a grav tree is initialized without any points...
-        if size_of_vec == 0 {
+        if pts.is_empty() {
             return GravTree {
                 root: Node::new(),
                 entities: Vec::new(),
-                number_of_entities: size_of_vec,
                 time_step,
                 max_entities,
                 theta,
@@ -114,7 +109,6 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
         GravTree {
             root: phantom_parent,
             entities,
-            number_of_entities: size_of_vec,
             time_step,
             max_entities,
             theta,
@@ -125,13 +119,13 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     }
 
     /// Create a new GravTree with default parallel threshold.
-    /// 
+    ///
     /// This is a convenience method that uses `DEFAULT_PARALLEL_THRESHOLD` (100).
     /// For more control over parallel performance, use `new()` directly.
     pub fn with_default_parallel_threshold(
         pts: &[T],
         time_step: f64,
-        max_entities: i32,
+        max_entities: usize,
         theta: f64,
         calculate_collisions: CalculateCollisions,
     ) -> GravTree<T>
@@ -149,6 +143,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     /// Traverses the tree and returns a vector of all entities in the tree.
     ///
     /// With arena pattern, this simply clones from the entity storage.
+    #[inline]
     pub fn as_vec(&self) -> Vec<T> {
         self.entities.clone()
     }
@@ -163,18 +158,20 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     /// ```rust
     /// # use bigbang::{GravTree, Entity, CalculateCollisions};
     /// # let entities = vec![Entity::default()];
-    /// let tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// let tree = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
     /// for entity in tree.iter() {
     ///     // Work with borrowed entity without cloning
     ///     println!("Entity at ({}, {}, {})", entity.x, entity.y, entity.z);
     /// }
     /// ```
+    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.entities.iter()
     }
     /// Gets the total number of entities contained by this tree.
+    #[inline]
     pub fn get_number_of_entities(&self) -> usize {
-        self.number_of_entities
+        self.entities.len()
     }
 
     /// This function creates a new GravTree with updated entity positions after applying gravity.
@@ -235,13 +232,12 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     /// ```rust
     /// # use bigbang::{GravTree, Entity, CalculateCollisions};
     /// # let entities = vec![Entity::default()];
-    /// let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// let mut tree = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
     /// tree.time_step_mut(); // Updates entities in place (zero-copy!)
     /// ```
     pub fn time_step_mut(&mut self) {
         if self.entities.is_empty() {
             self.root = Node::new();
-            self.number_of_entities = 0;
             self.tree_needs_rebuild = false;
             return;
         }
@@ -302,7 +298,7 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
     /// ```rust
     /// # use bigbang::{GravTree, Entity, CalculateCollisions};
     /// # let entities = vec![Entity::default()];
-    /// let mut tree = GravTree::new(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// let mut tree = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
     /// tree.time_step_mut();
     /// // ... do other work ...
     /// tree.rebuild_tree(); // Rebuild now for next operation

@@ -168,6 +168,7 @@ impl Entity {
 
     /// The returns the distance squared between two particles.
     /// Take the sqrt of this to get the distance.
+    #[inline]
     pub(crate) fn distance_squared(&self, other: &Entity) -> f64 {
         // (x2 - x1) + (y2 - y1) + (z2 - z1)
         // all dist variables  are squared
@@ -200,6 +201,7 @@ impl Entity {
 
     /// Returns a boolean representing whether or node the node is within the theta range
     /// of the entity.
+    #[inline]
     fn theta_exceeded(&self, node: &Node, theta: f64) -> bool {
         // OPTIMIZATION: Calculate distance squared directly without creating temporary Entity
         let dx = node.center_of_mass.0 - self.x;
@@ -212,6 +214,7 @@ impl Entity {
 
     /// Given two entities, self and other, returns the acceleration that other is exerting on
     /// self. Other can be either an entity or a node.
+    #[inline]
     fn get_gravitational_acceleration<T: AsEntity + Clone>(
         &self,
         oth: Either<&Entity, &Node>,
@@ -263,11 +266,14 @@ impl Entity {
                     let other = &arena[idx];
                     // OPTIMIZATION: Cache as_entity() to avoid repeated conversions
                     let other_entity = other.as_entity();
+
+                    // Check collision first
                     if self.did_collide_into(&other_entity) {
                         collisions.push(other);
                     }
-                    let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&other_entity));
+
+                    // Calculate acceleration using cached entity
+                    let tmp_accel = self.get_gravitational_acceleration::<Entity>(Left(&other_entity));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;

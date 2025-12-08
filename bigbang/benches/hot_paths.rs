@@ -419,4 +419,3 @@ criterion_group!(
 );
 
 criterion_main!(hot_path_benches);
-
