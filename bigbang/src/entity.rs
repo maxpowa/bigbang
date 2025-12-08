@@ -16,7 +16,7 @@ pub enum CalculateCollisions {
 /// velocity, position, radius, and mass. This gravitational tree contains many entities and it moves
 /// them around according to the gravity they exert on each other.
 #[cfg_attr(feature = "bevy_ecs", derive(::bevy_ecs::prelude::Component))]
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct Entity {
     pub vx: f64,
@@ -31,7 +31,9 @@ pub struct Entity {
 
 impl AsEntity for Entity {
     fn as_entity(&self) -> Entity {
-        self.clone()
+        // Entity is a plain-old-data struct with Copy semantics
+        // This is not a deep clone - just copying 8 f64 values (64 bytes)
+        *self
     }
 }
 
@@ -148,7 +150,12 @@ impl Entity {
     /// Needs to be reworked to use min/max position values, but it naively checks
     /// if two things collide right now.
     fn did_collide_into(&self, other: &Entity) -> bool {
-        self != other && self.distance(other) <= (self.radius + other.radius)
+        // OPTIMIZATION: Use distance_squared to avoid expensive sqrt
+        if self == other {
+            return false;
+        }
+        let radii_sum = self.radius + other.radius;
+        self.distance_squared(other) <= radii_sum * radii_sum
     }
 
     /// Returns the entity as a string with space separated values.
@@ -161,7 +168,7 @@ impl Entity {
 
     /// The returns the distance squared between two particles.
     /// Take the sqrt of this to get the distance.
-    fn distance_squared(&self, other: &Entity) -> f64 {
+    pub(crate) fn distance_squared(&self, other: &Entity) -> f64 {
         // (x2 - x1) + (y2 - y1) + (z2 - z1)
         // all dist variables  are squared
         // This is being called from somewhere where `other` has NaN values
@@ -194,13 +201,13 @@ impl Entity {
     /// Returns a boolean representing whether or node the node is within the theta range
     /// of the entity.
     fn theta_exceeded(&self, node: &Node, theta: f64) -> bool {
-        // 1) distance from entity to COM of that node
-        // 2) if 1) * theta > size (max diff) then
-        // This frequently makes a node with NaN positions
-        let node_as_entity = node.as_entity();
-        let dist = self.distance_squared(&node_as_entity);
+        // OPTIMIZATION: Calculate distance squared directly without creating temporary Entity
+        let dx = node.center_of_mass.0 - self.x;
+        let dy = node.center_of_mass.1 - self.y;
+        let dz = node.center_of_mass.2 - self.z;
+        let dist_squared = dx * dx + dy * dy + dz * dz;
         let max_dist = node.max_distance();
-        (dist) * (theta * theta) > (max_dist * max_dist)
+        dist_squared * (theta * theta) > (max_dist * max_dist)
     }
 
     /// Given two entities, self and other, returns the acceleration that other is exerting on
@@ -209,9 +216,9 @@ impl Entity {
         &self,
         oth: Either<&Entity, &Node>,
     ) -> (f64, f64, f64) {
-        // TODO get rid of this clone
+        // OPTIMIZATION: Use Copy instead of Clone for Entity (8 f64s = 64 bytes on stack)
         let other = match oth {
-            Left(entity) => entity.clone(),
+            Left(entity) => *entity,
             Right(node) => node.as_entity(),
         };
         let d_magnitude = self.distance(&other);
@@ -245,7 +252,8 @@ impl Entity {
         arena: &'a [T],
         theta: f64,
     ) -> SimulationResult<T> {
-        let mut collisions = Vec::new();
+        // OPTIMIZATION: Pre-allocate with small capacity to avoid reallocations in common case
+        let mut collisions = Vec::with_capacity(4);
         let mut acceleration = (0., 0., 0.);
         if let Some(node) = &node.left {
             if node.point_indices.is_some() {
@@ -253,11 +261,13 @@ impl Entity {
                 let indices = node.point_indices.as_ref().expect("unexpected null node 2");
                 for &idx in indices {
                     let other = &arena[idx];
-                    if self.did_collide_into(&other.as_entity()) {
+                    // OPTIMIZATION: Cache as_entity() to avoid repeated conversions
+                    let other_entity = other.as_entity();
+                    if self.did_collide_into(&other_entity) {
                         collisions.push(other);
                     }
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&other_entity));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
@@ -284,11 +294,13 @@ impl Entity {
                 let indices = node.point_indices.as_ref().expect("unexpected null node 2");
                 for &idx in indices {
                     let other = &arena[idx];
-                    if self.did_collide_into(&other.as_entity()) {
+                    // OPTIMIZATION: Cache as_entity() to avoid repeated conversions
+                    let other_entity = other.as_entity();
+                    if self.did_collide_into(&other_entity) {
                         collisions.push(other);
                     }
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&other_entity));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
@@ -311,11 +323,7 @@ impl Entity {
         };
         SimulationResult {
             collisions,
-            gravitational_acceleration: (
-                acceleration.0,
-                acceleration.1,
-                acceleration.2,
-            ),
+            gravitational_acceleration: acceleration,
         }
     }
     pub(crate) fn get_acceleration_without_collisions<'a, T: AsEntity + Clone>(
@@ -331,8 +339,10 @@ impl Entity {
                 let indices = node.point_indices.as_ref().expect("unexpected null node 2");
                 for &idx in indices {
                     let other = &arena[idx];
+                    // OPTIMIZATION: Cache as_entity() to avoid repeated conversions
+                    let other_entity = other.as_entity();
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&other_entity));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
@@ -358,8 +368,10 @@ impl Entity {
                 let indices = node.point_indices.as_ref().expect("unexpected null node 2");
                 for &idx in indices {
                     let other = &arena[idx];
+                    // OPTIMIZATION: Cache as_entity() to avoid repeated conversions
+                    let other_entity = other.as_entity();
                     let tmp_accel =
-                        self.get_gravitational_acceleration::<Entity>(Left(&(other.as_entity())));
+                        self.get_gravitational_acceleration::<Entity>(Left(&other_entity));
                     acceleration.0 += tmp_accel.0;
                     acceleration.1 += tmp_accel.1;
                     acceleration.2 += tmp_accel.2;
@@ -381,11 +393,7 @@ impl Entity {
         };
         SimulationResult {
             collisions: vec![],
-            gravitational_acceleration: (
-                acceleration.0,
-                acceleration.1,
-                acceleration.2,
-            ),
+            gravitational_acceleration: acceleration,
         }
     }
 }
