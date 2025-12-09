@@ -14,16 +14,16 @@ struct MyEntity {
 
 impl AsEntity for MyEntity {
     fn as_entity(&self) -> Entity {
-        return Entity {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            vx: self.vx,
-            vy: self.vy,
-            vz: self.vz,
-            radius: self.radius,
-            mass: if self.radius < 1. { 0.5 } else { 105. },
-        };
+        return Entity::new(
+            self.vx,
+            self.vy,
+            self.vz,
+            self.x,
+            self.y,
+            self.z,
+            self.radius,
+            if self.radius < 1. { 0.5 } else { 105. },
+        );
     }
 }
 

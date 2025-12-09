@@ -6,26 +6,8 @@ use bigbang::{CalculateCollisions, Entity, GravTree};
 fn test_head_on_elastic_collision() {
     // Two equal-mass particles moving toward each other should exchange velocities
     let entities = vec![
-        Entity {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            vx: 1.0,  // Moving right
-            vy: 0.0,
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
-        Entity {
-            x: 1.5,  // Overlapping (radii = 1.0 + 1.0 = 2.0 > distance 1.5)
-            y: 0.0,
-            z: 0.0,
-            vx: -1.0,  // Moving left
-            vy: 0.0,
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
+        Entity::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 10.0),  // Moving right
+        Entity::new(-1.0, 0.0, 0.0, 1.5, 0.0, 0.0, 1.0, 10.0), // Moving left, overlapping
     ];
 
     let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
@@ -50,26 +32,8 @@ fn test_head_on_elastic_collision() {
 fn test_glancing_collision_preserves_tangential_velocity() {
     // Test that glancing collision preserves tangential velocity component
     let entities = vec![
-        Entity {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            vx: 1.0,   // Moving right
-            vy: 0.0,   // No vertical motion
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
-        Entity {
-            x: 1.5,
-            y: 0.5,  // Offset in Y (glancing collision)
-            z: 0.0,
-            vx: -1.0,  // Moving left
-            vy: 2.0,   // Moving up (tangential component)
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
+        Entity::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 10.0),  // Moving right
+        Entity::new(-1.0, 2.0, 0.0, 1.5, 0.5, 0.0, 1.0, 10.0), // Moving left, moving up (tangential)
     ];
 
     let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
@@ -94,26 +58,8 @@ fn test_glancing_collision_preserves_tangential_velocity() {
 fn test_uses_actual_mass_not_radius() {
     // Two particles with same radius but different mass
     let entities = vec![
-        Entity {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            vx: 1.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: 100.0,  // Very heavy
-            radius: 1.0,
-        },
-        Entity {
-            x: 1.5,
-            y: 0.0,
-            z: 0.0,
-            vx: -1.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: 1.0,  // Very light (same radius!)
-            radius: 1.0,
-        },
+        Entity::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 100.0),  // Very heavy
+        Entity::new(-1.0, 0.0, 0.0, 1.5, 0.0, 0.0, 1.0, 1.0),   // Very light (same radius!)
     ];
 
     let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
@@ -143,26 +89,8 @@ fn test_uses_actual_mass_not_radius() {
 fn test_collision_physics_no_clone() {
     // Verify the implementation doesn't clone collision vector (performance test)
     let entities = vec![
-        Entity {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            vx: 1.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
-        Entity {
-            x: 1.5,
-            y: 0.0,
-            z: 0.0,
-            vx: -1.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
+        Entity::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 10.0),
+        Entity::new(-1.0, 0.0, 0.0, 1.5, 0.0, 0.0, 1.0, 10.0),
     ];
 
     let tree = GravTree::with_default_parallel_threshold(&entities, 0.01, 3, 0.5, CalculateCollisions::Yes);
@@ -176,26 +104,8 @@ fn test_collision_physics_no_clone() {
 fn test_momentum_conservation_in_collision() {
     // Verify momentum is conserved in elastic collision
     let entities = vec![
-        Entity {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            vx: 2.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: 5.0,
-            radius: 1.0,
-        },
-        Entity {
-            x: 1.5,
-            y: 0.0,
-            z: 0.0,
-            vx: -1.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: 10.0,
-            radius: 1.0,
-        },
+        Entity::new(2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 5.0),
+        Entity::new(-1.0, 0.0, 0.0, 1.5, 0.0, 0.0, 1.0, 10.0),
     ];
 
     let tree = GravTree::with_default_parallel_threshold(&entities, 0.001, 3, 0.5, CalculateCollisions::Yes);  // Small timestep
@@ -216,4 +126,3 @@ fn test_momentum_conservation_in_collision() {
         final_momentum_x
     );
 }
-

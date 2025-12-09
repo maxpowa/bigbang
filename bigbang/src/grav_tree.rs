@@ -289,6 +289,117 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
         self.tree_needs_rebuild = true;
     }
 
+    /// Updates the tree using proper Velocity Verlet integration for improved energy conservation.
+    /// 
+    /// This method performs two force evaluations per timestep:
+    /// 1. Calculate acceleration at current positions (t)
+    /// 2. Update positions using v(t) and a(t)
+    /// 3. Rebuild tree and calculate acceleration at new positions (t+dt)
+    /// 4. Update velocities using average of a(t) and a(t+dt)
+    ///
+    /// This is more accurate than `time_step_mut()` but approximately twice as expensive
+    /// due to the second force evaluation. Recommended for simulations where energy
+    /// conservation and long-term stability are critical.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bigbang::{GravTree, Entity, CalculateCollisions};
+    /// # let entities = vec![Entity::default()];
+    /// let mut tree = GravTree::with_default_parallel_threshold(&entities, 0.1, 3, 0.5, CalculateCollisions::No);
+    /// tree.time_step_mut_verlet(); // More accurate integration
+    /// ```
+    pub fn time_step_mut_verlet(&mut self) {
+        use crate::SimulationResult;
+        use crate::Entity;
+        
+        if self.entities.is_empty() {
+            self.root = Node::new();
+            self.tree_needs_rebuild = false;
+            return;
+        }
+
+        // Rebuild tree if needed to ensure accurate current accelerations
+        if self.tree_needs_rebuild {
+            self.rebuild_tree();
+        }
+
+        // STEP 1: Calculate accelerations at current positions (t)
+        let accelerations_current: Vec<(f64, f64, f64)> = self.entities
+            .par_iter()
+            .map(|entity| {
+                let entity_as_entity = entity.as_entity();
+                let result = match self.calculate_collisions {
+                    CalculateCollisions::Yes => {
+                        entity_as_entity.get_acceleration_and_collisions(&self.root, &self.entities, self.theta)
+                    }
+                    CalculateCollisions::No => {
+                        entity_as_entity.get_acceleration_without_collisions(&self.root, &self.entities, self.theta)
+                    }
+                };
+                result.gravitational_acceleration
+            })
+            .collect();
+
+        // STEP 2: Predict positions at t+dt for second acceleration evaluation
+        // Create temporary predicted entities for tree rebuild
+        let predicted_entities: Vec<Entity> = self.entities
+            .par_iter()
+            .zip(accelerations_current.par_iter())
+            .map(|(entity, &(ax, ay, az))| {
+                let mut predicted = entity.as_entity();
+                let dt = self.time_step;
+                
+                // Predict position using: x(t+dt) = x(t) + v(t)*dt + 0.5*a(t)*dt^2
+                predicted.x += predicted.vx * dt + 0.5 * ax * dt * dt;
+                predicted.y += predicted.vy * dt + 0.5 * ay * dt * dt;
+                predicted.z += predicted.vz * dt + 0.5 * az * dt * dt;
+                
+                predicted
+            })
+            .collect();
+
+        // STEP 3: Build temporary tree with predicted positions and calculate accelerations at t+dt
+        let mut temp_tree = Node::new();
+        temp_tree.left = Some(Box::new(Node::new_root_node(&predicted_entities, self.max_entities, self.parallel_threshold)));
+        temp_tree.point_indices = Some(Vec::new());
+        
+        let accelerations_next: Vec<(f64, f64, f64)> = predicted_entities
+            .par_iter()
+            .map(|entity| {
+                let result = match self.calculate_collisions {
+                    CalculateCollisions::Yes => {
+                        entity.get_acceleration_and_collisions(&temp_tree, &predicted_entities, self.theta)
+                    }
+                    CalculateCollisions::No => {
+                        entity.get_acceleration_without_collisions(&temp_tree, &predicted_entities, self.theta)
+                    }
+                };
+                result.gravitational_acceleration
+            })
+            .collect();
+
+        // STEP 4: Apply Verlet integration using both current and next accelerations
+        self.entities
+            .par_iter_mut()
+            .zip(accelerations_current.par_iter().zip(accelerations_next.par_iter()))
+            .for_each(|(entity, (&accel_current, &accel_next))| {
+                // Create SimulationResults with just accelerations (no collisions for Verlet)
+                let result_current_t = SimulationResult {
+                    collisions: Vec::new(),
+                    gravitational_acceleration: accel_current,
+                };
+                let result_next_t = SimulationResult {
+                    collisions: Vec::new(),
+                    gravitational_acceleration: accel_next,
+                };
+                
+                entity.respond_mut_verlet(result_current_t, result_next_t, self.time_step);
+            });
+
+        // Mark tree as stale since entities have moved to new positions
+        self.tree_needs_rebuild = true;
+    }
+
     /// Explicitly rebuilds the tree structure from current entity positions.
     ///
     /// This is automatically called when needed by `time_step_mut()`, but you can

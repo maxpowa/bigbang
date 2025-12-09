@@ -202,3 +202,133 @@ fn five_entities_accel() {
     assert!((after_time_step[4].vy - (-0.11042470073913033)).abs() < EPSILON);
     assert!((after_time_step[4].vz - (-0.00023996603805160843)).abs() < EPSILON);
 }
+
+/// Test that an entity in a predefined circular orbit maintains its orbit after 100000 iterations
+#[test]
+fn circular_orbit_stability() {
+    use bigbang::{Entity, GravTree, CalculateCollisions};
+
+    // Central body (e.g., Sun or Earth)
+    let central_mass = 1000.0;
+    let central_radius = 10.0;
+
+    // Orbiting body
+    let orbit_radius = 500.0; // Distance from central body
+    let orbiting_mass = 1.0; // Small mass to not perturb the system
+    let orbiting_radius = 1.0;
+
+    // For a circular orbit: v = sqrt(G * M / r)
+    // Assuming G = 1.0 in normalized units
+    let g = 1.0;
+    let orbital_velocity = ((g * central_mass / orbit_radius) as f64).sqrt();
+
+    // Central body at origin (stationary)
+    let central = Entity::new(
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        central_radius,
+        central_mass,
+    );
+
+    // Orbiting body starts at (orbit_radius, 0, 0) with velocity in +y direction
+    let orbiting = Entity::new(
+        0.0,
+        orbital_velocity,
+        0.0,
+        orbit_radius,
+        0.0,
+        0.0,
+        orbiting_radius,
+        orbiting_mass,
+    );
+
+    let entities = vec![central, orbiting];
+
+    // Create simulation with appropriate parameters
+    // theta = 0.5 for Barnes-Hut approximation (realistic usage)
+    // Smaller time step for accuracy with Velocity Verlet integration
+    let time_step = 0.1;
+    let theta = 0.5;
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, theta, CalculateCollisions::No);
+
+    // Track orbital parameters over time
+    let mut orbital_radii = Vec::new();
+    let mut velocities = Vec::new();
+
+    // Run simulation for 100000 iterations using Velocity Verlet for better long-term stability
+    for _ in 0..100000 {
+        tree.time_step_mut_verlet();
+        let entities = tree.as_vec();
+        let central = &entities[0];
+        let orbiter = &entities[1];
+
+        // Calculate distance from central body (relative distance, not from origin)
+        let dx = orbiter.x - central.x;
+        let dy = orbiter.y - central.y;
+        let dz = orbiter.z - central.z;
+        let r = (dx * dx + dy * dy + dz * dz).sqrt();
+        orbital_radii.push(r);
+
+        // Calculate relative velocity magnitude
+        let dvx = orbiter.vx - central.vx;
+        let dvy = orbiter.vy - central.vy;
+        let dvz = orbiter.vz - central.vz;
+        let v = (dvx * dvx + dvy * dvy + dvz * dvz).sqrt();
+        velocities.push(v);
+    }
+
+    // Calculate statistics for orbital radius
+    let mean_radius: f64 = orbital_radii.iter().sum::<f64>() / orbital_radii.len() as f64;
+    let max_radius = orbital_radii.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_radius = orbital_radii.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // Calculate statistics for velocity
+    let mean_velocity: f64 = velocities.iter().sum::<f64>() / velocities.len() as f64;
+    let max_velocity = velocities.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_velocity = velocities.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // Assert orbital stability
+    // The orbit should remain within 1% of the initial radius
+    // (tolerance increased to account for Barnes-Hut approximation errors)
+    let radius_tolerance = orbit_radius * 0.01;
+    assert!(
+        (mean_radius - orbit_radius).abs() < radius_tolerance,
+        "Mean orbital radius {} deviates too much from initial radius {}",
+        mean_radius,
+        orbit_radius
+    );
+    assert!(
+        max_radius < orbit_radius + radius_tolerance,
+        "Maximum orbital radius {} exceeds tolerance",
+        max_radius
+    );
+    assert!(
+        min_radius > orbit_radius - radius_tolerance,
+        "Minimum orbital radius {} below tolerance",
+        min_radius
+    );
+
+    // Velocity should also remain stable within 1%
+    let velocity_tolerance = orbital_velocity * 0.01;
+    assert!(
+        (mean_velocity - orbital_velocity).abs() < velocity_tolerance,
+        "Mean velocity {} deviates too much from expected orbital velocity {}",
+        mean_velocity,
+        orbital_velocity
+    );
+    assert!(
+        max_velocity < orbital_velocity + velocity_tolerance,
+        "Maximum velocity {} exceeds tolerance",
+        max_velocity
+    );
+    assert!(
+        min_velocity > orbital_velocity - velocity_tolerance,
+        "Minimum velocity {} below tolerance",
+        min_velocity
+    );
+}
+

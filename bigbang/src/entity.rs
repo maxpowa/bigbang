@@ -27,6 +27,7 @@ pub struct Entity {
     pub z: f64,
     pub radius: f64,
     pub mass: f64,
+    _private: ()
 }
 
 impl AsEntity for Entity {
@@ -96,22 +97,109 @@ impl Responsive for Entity {
             self.vz += delta_vn * nz;
         }
 
-        // Velocity Verlet integration - mutate in place
-        let vx_half = self.vx + 0.5 * ax * time_step;
-        let vy_half = self.vy + 0.5 * ay * time_step;
-        let vz_half = self.vz + 0.5 * az * time_step;
+        // Single-step Symplectic Euler integration
+        // Note: This is less accurate than Velocity Verlet. Use respond_mut_verlet for better accuracy.
+        self.vx += ax * time_step;
+        self.vy += ay * time_step;
+        self.vz += az * time_step;
 
-        self.x += vx_half * time_step;
-        self.y += vy_half * time_step;
-        self.z += vz_half * time_step;
+        self.x += self.vx * time_step;
+        self.y += self.vy * time_step;
+        self.z += self.vz * time_step;
+    }
 
-        self.vx = vx_half + 0.5 * ax * time_step;
-        self.vy = vy_half + 0.5 * ay * time_step;
-        self.vz = vz_half + 0.5 * az * time_step;
+    fn respond_mut_verlet(
+        &mut self,
+        simulation_result_current: SimulationResult<Entity>,
+        simulation_result_next: SimulationResult<Entity>,
+        time_step: f64,
+    ) {
+        let (ax_current, ay_current, az_current) = simulation_result_current.gravitational_acceleration;
+        let (ax_next, ay_next, az_next) = simulation_result_next.gravitational_acceleration;
+        let self_mass = self.mass;
+
+        // Handle collisions with proper 3D elastic collision physics
+        // Apply collisions from current timestep before integration
+        for other in simulation_result_current.collisions.iter() {
+            let other_mass = other.mass;
+
+            // Calculate collision normal vector (from self to other)
+            let dx = other.x - self.x;
+            let dy = other.y - self.y;
+            let dz = other.z - self.z;
+            let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+
+            if dist < 1e-10 {
+                continue;
+            }
+
+            let nx = dx / dist;
+            let ny = dy / dist;
+            let nz = dz / dist;
+
+            // Project velocities onto collision normal
+            let v1n = self.vx * nx + self.vy * ny + self.vz * nz;
+            let v2n = other.vx * nx + other.vy * ny + other.vz * nz;
+
+            // Apply 1D elastic collision formula to normal component
+            let mass_sum = self_mass + other_mass;
+            let v1n_new = ((self_mass - other_mass) * v1n + 2.0 * other_mass * v2n) / mass_sum;
+
+            let delta_vn = v1n_new - v1n;
+
+            // Update velocity in place
+            self.vx += delta_vn * nx;
+            self.vy += delta_vn * ny;
+            self.vz += delta_vn * nz;
+        }
+
+        // Proper Velocity Verlet integration:
+        // v(t + dt/2) = v(t) + a(t) * dt/2
+        // x(t + dt) = x(t) + v(t + dt/2) * dt
+        // v(t + dt) = v(t + dt/2) + a(t + dt) * dt/2
+        //
+        // Equivalent to:
+        // x(t + dt) = x(t) + v(t) * dt + 0.5 * a(t) * dt^2
+        // v(t + dt) = v(t) + 0.5 * (a(t) + a(t + dt)) * dt
+
+        let dt = time_step;
+
+        // Update position using current velocity and acceleration
+        self.x += self.vx * dt + 0.5 * ax_current * dt * dt;
+        self.y += self.vy * dt + 0.5 * ay_current * dt * dt;
+        self.z += self.vz * dt + 0.5 * az_current * dt * dt;
+
+        // Update velocity using average of current and next acceleration
+        self.vx += 0.5 * (ax_current + ax_next) * dt;
+        self.vy += 0.5 * (ay_current + ay_next) * dt;
+        self.vz += 0.5 * (az_current + az_next) * dt;
     }
 }
 
 impl Entity {
+
+    pub fn new(
+        vx: f64,
+        vy: f64,
+        vz: f64,
+        x: f64,
+        y: f64,
+        z: f64,
+        radius: f64,
+        mass: f64,
+    ) -> Self {
+        Entity {
+            vx,
+            vy,
+            vz,
+            x,
+            y,
+            z,
+            radius,
+            mass,
+            _private: (),
+        }
+    }
 
     pub fn from_pos_radius_mass(
         x: f64,
@@ -129,6 +217,7 @@ impl Entity {
             z,
             radius,
             mass,
+            _private: (),
         }
     }
 
@@ -144,6 +233,7 @@ impl Entity {
             z,
             radius,
             mass: radius * 1000.,
+            _private: (),
         }
     }
 
@@ -254,7 +344,7 @@ impl Entity {
         node: &'a Node,
         arena: &'a [T],
         theta: f64,
-    ) -> SimulationResult<T> {
+    ) -> SimulationResult<'a, T> {
         // OPTIMIZATION: Pre-allocate with small capacity to avoid reallocations in common case
         let mut collisions = Vec::with_capacity(4);
         let mut acceleration = (0., 0., 0.);
@@ -337,7 +427,7 @@ impl Entity {
         node: &'a Node,
         arena: &'a [T],
         theta: f64,
-    ) -> SimulationResult<T> {
+    ) -> SimulationResult<'a, T> {
         let mut acceleration = (0., 0., 0.);
         if let Some(node) = &node.left {
             if node.point_indices.is_some() {

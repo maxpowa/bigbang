@@ -109,17 +109,16 @@ impl Node {
         );
         let max_dimension_range = f64::max(range_x, f64::max(range_y, range_z));
         let super_radius = max_dimension_range / 2f64 + self.r_max;
-        // Center of mass is NaN a lot
-        Entity {
-            x: self.center_of_mass.0,
-            y: self.center_of_mass.1,
-            z: self.center_of_mass.2,
-            vx: 0.0,
-            vy: 0.0,
-            vz: 0.0,
-            mass: self.total_mass,
-            radius: super_radius,
-        }
+        Entity::new(
+            0.0,
+            0.0,
+            0.0,
+            self.center_of_mass.0,
+            self.center_of_mass.1,
+            self.center_of_mass.2,
+            self.total_mass,
+            super_radius,
+        )
     }
 
     #[inline]
@@ -128,30 +127,6 @@ impl Node {
         let y_distance = self.y_max - self.y_min;
         let z_distance = self.z_max - self.z_min;
         f64::max(x_distance, f64::max(y_distance, z_distance))
-    }
-
-    /// Traverses tree and returns entities by resolving indices from arena.
-    pub(crate) fn traverse_tree_helper<T: AsEntity + Clone>(&self, arena: &[T]) -> Vec<T> {
-        let mut to_return: Vec<T> = Vec::new();
-        if let Some(node) = &self.left {
-            to_return.append(&mut node.traverse_tree_helper(arena));
-        }
-        if let Some(node) = &self.right {
-            to_return.append(&mut node.traverse_tree_helper(arena));
-        } else {
-            // Use indices to resolve entities from arena
-            if let Some(ref indices) = self.point_indices {
-                to_return.extend(indices.iter().map(|&idx| arena[idx].clone()));
-            }
-        }
-        to_return
-    }
-
-    /// Returns an iterator over all entities in the tree without cloning them.
-    /// This is a zero-copy alternative to `traverse_tree_helper()`.
-    #[inline]
-    pub(crate) fn iter<'a, T: AsEntity + Clone>(&'a self, arena: &'a [T]) -> NodeIterator<'a, T> {
-        NodeIterator::new(self, arena)
     }
 
     /// Takes in a slice of entities and creates a recursive 3d tree structure using indices.
@@ -300,16 +275,16 @@ fn test() {
     // Entity now has a proper Responsive implementation in entity.rs
     let mut test_vec: Vec<Entity> = Vec::new();
     for i in 0..10 {
-        test_vec.push(Entity {
-            x: i as f64,
-            y: (10 - i) as f64,
-            z: i as f64,
-            vx: i as f64,
-            vy: i as f64,
-            vz: i as f64,
-            mass: i as f64,
-            radius: i as f64,
-        });
+        test_vec.push(Entity::new(
+            i as f64,
+            i as f64,
+            i as f64,
+            i as f64,
+            (10 - i) as f64,
+            i as f64,
+            i as f64,
+            i as f64,
+        ));
     }
 
     let check_vec = test_vec.clone();
@@ -347,71 +322,4 @@ fn test() {
     // The total mass of the root node should be the sum of all of their masses.
     let total_mass = check_vec.iter().fold(0., |acc, x| acc + x.mass);
     assert_eq!(total_mass, tree.root.left.unwrap().total_mass);
-}
-
-/// Zero-copy iterator over entities in a Node tree using arena pattern.
-///
-/// This iterator traverses the tree structure without cloning entities,
-/// yielding references to entities resolved from the arena via indices.
-pub(crate) struct NodeIterator<'a, T: AsEntity + Clone> {
-    /// Stack of nodes to visit. We use a Vec as a stack for depth-first traversal.
-    stack: Vec<&'a Node>,
-    /// When we reach a leaf node, we iterate through its indices.
-    current_leaf_iter: Option<std::slice::Iter<'a, usize>>,
-    /// Arena for resolving indices to entities.
-    arena: &'a [T],
-}
-
-impl<'a, T: AsEntity + Clone> NodeIterator<'a, T> {
-    #[inline]
-    pub(crate) fn new(root: &'a Node, arena: &'a [T]) -> Self {
-        NodeIterator {
-            stack: vec![root],
-            current_leaf_iter: None,
-            arena,
-        }
-    }
-}
-
-impl<'a, T: AsEntity + Clone> Iterator for NodeIterator<'a, T> {
-    type Item = &'a T;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        // If we're currently iterating through a leaf node's indices, continue doing so
-        if let Some(ref mut leaf_iter) = self.current_leaf_iter {
-            if let Some(&idx) = leaf_iter.next() {
-                return Some(&self.arena[idx]);
-            } else {
-                // Finished with this leaf, clear it
-                self.current_leaf_iter = None;
-            }
-        }
-
-        // Process nodes from the stack
-        while let Some(node) = self.stack.pop() {
-            // If this node has point_indices, it's a leaf - start iterating through them
-            if let Some(ref indices) = node.point_indices {
-                let mut iter = indices.iter();
-                // Get the first index (if any) and store the iterator for subsequent calls
-                if let Some(&idx) = iter.next() {
-                    self.current_leaf_iter = Some(iter);
-                    return Some(&self.arena[idx]);
-                }
-                // If indices is empty, continue to next node
-                continue;
-            }
-
-            // Internal node - push children onto stack (right first, then left for DFS order)
-            if let Some(ref right) = node.right {
-                self.stack.push(right);
-            }
-            if let Some(ref left) = node.left {
-                self.stack.push(left);
-            }
-        }
-
-        // No more nodes or entities
-        None
-    }
 }

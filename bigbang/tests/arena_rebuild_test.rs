@@ -15,16 +15,16 @@ struct TestEntity {
 
 impl AsEntity for TestEntity {
     fn as_entity(&self) -> Entity {
-        Entity {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            vx: self.vx,
-            vy: self.vy,
-            vz: self.vz,
-            radius: self.radius,
-            mass: self.mass,
-        }
+        Entity::new(
+            self.vx,
+            self.vy,
+            self.vz,
+            self.x,
+            self.y,
+            self.z,
+            self.radius,
+            self.mass,
+        )
     }
 }
 

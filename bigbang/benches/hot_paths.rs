@@ -8,16 +8,7 @@ use std::time;
 
 // Helper function to create a simple entity
 fn create_entity(x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64, radius: f64) -> Entity {
-    Entity {
-        x,
-        y,
-        z,
-        vx,
-        vy,
-        vz,
-        mass,
-        radius,
-    }
+    Entity::new(vx, vy, vz, x, y, z, radius, mass)
 }
 
 // Helper function to create test data for various scenarios
