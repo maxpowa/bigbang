@@ -1,7 +1,7 @@
-﻿/// Formal verification tests for the bigbang n-body simulation library
+/// Formal verification tests for the bigbang n-body simulation library
 ///
 /// This test suite compares the Barnes-Hut tree approximation against:
-/// 1. A direct O(n²) brute-force n-body simulator (reference implementation)
+/// 1. A direct O(n^2) brute-force n-body simulator (reference implementation)
 /// 2. Known analytical solutions for simple cases
 /// 3. Physical conservation laws (energy, momentum, angular momentum)
 
@@ -27,16 +27,16 @@ struct VerifiableEntity {
 
 impl AsEntity for VerifiableEntity {
     fn as_entity(&self) -> Entity {
-        Entity {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            vx: self.vx,
-            vy: self.vy,
-            vz: self.vz,
-            radius: self.radius,
-            mass: self.mass,
-        }
+        Entity::new(
+            self.vx,
+            self.vy,
+            self.vz,
+            self.x,
+            self.y,
+            self.z,
+            self.radius,
+            self.mass,
+        )
     }
 }
 
@@ -85,7 +85,7 @@ impl VerifiableEntity {
     }
 }
 
-/// Direct O(n²) n-body simulation - reference implementation
+/// Direct O(n�) n-body simulation - reference implementation
 /// This is guaranteed to be correct (no approximations) but slow
 struct DirectNBodySimulator {
     entities: Vec<VerifiableEntity>,
@@ -117,8 +117,8 @@ impl DirectNBodySimulator {
             let dist_sq = dx * dx + dy * dy + dz * dz + EPSILON * EPSILON;
             let dist = dist_sq.sqrt();
 
-            // F = G * m1 * m2 / r²
-            // a = F / m1 = G * m2 / r²
+            // F = G * m1 * m2 / r�
+            // a = F / m1 = G * m2 / r�
             let force_magnitude = G * other.mass / dist_sq;
 
             // Acceleration components
@@ -191,7 +191,7 @@ fn total_energy(entities: &[VerifiableEntity]) -> f64 {
 /// Calculate angular momentum of a system
 fn total_angular_momentum(entities: &[VerifiableEntity]) -> (f64, f64, f64) {
     entities.iter().fold((0.0, 0.0, 0.0), |(lx, ly, lz), e| {
-        // L = r × p = r × (m * v)
+        // L = r � p = r � (m * v)
         let lpx = e.mass * (e.y * e.vz - e.z * e.vy);
         let lpy = e.mass * (e.z * e.vx - e.x * e.vz);
         let lpz = e.mass * (e.x * e.vy - e.y * e.vx);
@@ -221,7 +221,7 @@ fn test_two_body_problem_against_direct() {
     }
 
     // Run Barnes-Hut simulation with very small theta (should be nearly exact)
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.01, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.01, CalculateCollisions::No);
     for _ in 0..num_steps {
         tree = tree.time_step();
     }
@@ -268,7 +268,7 @@ fn test_three_body_against_direct() {
     }
 
     // Run Barnes-Hut simulation
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.05, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.05, CalculateCollisions::No);
     for _ in 0..num_steps {
         tree = tree.time_step();
     }
@@ -302,7 +302,7 @@ fn test_momentum_conservation() {
     println!("Initial momentum: {:?}, magnitude: {}", initial_momentum, initial_p_mag);
 
     let time_step = 0.1;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.2, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.2, CalculateCollisions::No);
 
     // Run simulation for several steps
     for step in 0..20 {
@@ -341,7 +341,7 @@ fn test_energy_conservation() {
     println!("Initial energy: {}", initial_energy);
 
     let time_step = 0.1;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.1, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.1, CalculateCollisions::No);
 
     // Run simulation for several steps
     for step in 0..20 {
@@ -375,7 +375,7 @@ fn test_angular_momentum_conservation() {
     println!("Initial angular momentum: {:?}", initial_l);
 
     let time_step = 0.1;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.2, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.2, CalculateCollisions::No);
 
     // Calculate magnitude for relative error
     let initial_l_mag = (initial_l.0.powi(2) + initial_l.1.powi(2) + initial_l.2.powi(2)).sqrt();
@@ -414,7 +414,7 @@ fn test_stationary_particles() {
     ];
 
     let time_step = 0.1;
-    let tree = GravTree::new(&entities, time_step, 3, 0.2, CalculateCollisions::No);
+    let tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.2, CalculateCollisions::No);
     let result = tree.time_step();
     let entities = result.as_vec();
 
@@ -447,7 +447,7 @@ fn test_circular_orbit_stability() {
     ];
 
     let time_step = 1.0;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.1, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.1, CalculateCollisions::No);
 
     let initial_distance = r;
 
@@ -503,7 +503,7 @@ fn test_theta_accuracy_tradeoff() {
     let mut errors = Vec::new();
 
     for &theta in &theta_values {
-        let mut tree = GravTree::new(&entities, time_step, 3, theta, CalculateCollisions::No);
+        let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, theta, CalculateCollisions::No);
         tree = tree.time_step();
         let tree_entities = tree.as_vec();
 
@@ -559,7 +559,7 @@ fn test_many_body_against_direct() {
     }
 
     // Run Barnes-Hut simulation with small theta
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.1, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.1, CalculateCollisions::No);
     for _ in 0..3 {
         tree = tree.time_step();
     }

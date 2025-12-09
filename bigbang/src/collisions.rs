@@ -15,14 +15,20 @@ where
 {
     let p1 = p1.as_entity();
     let p2 = p2.as_entity();
-    // calculate the overlap of the two particles
-    let distance = p1.distance(&p2);
+
+    // OPTIMIZATION: Check collision using distance_squared first to avoid sqrt
     let radii_sum = p1.radius + p2.radius;
+    let dist_squared = p1.distance_squared(&p2);
+    let radii_sum_squared = radii_sum * radii_sum;
+
     // if the distance is greater than the radii combined, then there actually was no collision and
     // we can return early.
-    if distance >= radii_sum {
+    if dist_squared >= radii_sum_squared {
         return (p1.vx, p1.vy, p1.vz);
     }
+
+    // Only compute sqrt when we know there's a collision
+    let distance = dist_squared.sqrt();
     let overlap = radii_sum - distance;
     let force = stiffness * overlap;
     let acceleration_scalar = force / p1.mass;
