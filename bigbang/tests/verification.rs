@@ -1,7 +1,7 @@
-﻿/// Formal verification tests for the bigbang n-body simulation library
+/// Formal verification tests for the bigbang n-body simulation library
 ///
 /// This test suite compares the Barnes-Hut tree approximation against:
-/// 1. A direct O(n²) brute-force n-body simulator (reference implementation)
+/// 1. A direct O(n^2) brute-force n-body simulator (reference implementation)
 /// 2. Known analytical solutions for simple cases
 /// 3. Physical conservation laws (energy, momentum, angular momentum)
 
@@ -27,16 +27,16 @@ struct VerifiableEntity {
 
 impl AsEntity for VerifiableEntity {
     fn as_entity(&self) -> Entity {
-        Entity {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            vx: self.vx,
-            vy: self.vy,
-            vz: self.vz,
-            radius: self.radius,
-            mass: self.mass,
-        }
+        Entity::new(
+            self.vx,
+            self.vy,
+            self.vz,
+            self.x,
+            self.y,
+            self.z,
+            self.radius,
+            self.mass,
+        )
     }
 }
 
@@ -85,7 +85,7 @@ impl VerifiableEntity {
     }
 }
 
-/// Direct O(n²) n-body simulation - reference implementation
+/// Direct O(n�) n-body simulation - reference implementation
 /// This is guaranteed to be correct (no approximations) but slow
 struct DirectNBodySimulator {
     entities: Vec<VerifiableEntity>,
@@ -117,8 +117,8 @@ impl DirectNBodySimulator {
             let dist_sq = dx * dx + dy * dy + dz * dz + EPSILON * EPSILON;
             let dist = dist_sq.sqrt();
 
-            // F = G * m1 * m2 / r²
-            // a = F / m1 = G * m2 / r²
+            // F = G * m1 * m2 / r�
+            // a = F / m1 = G * m2 / r�
             let force_magnitude = G * other.mass / dist_sq;
 
             // Acceleration components
@@ -191,7 +191,7 @@ fn total_energy(entities: &[VerifiableEntity]) -> f64 {
 /// Calculate angular momentum of a system
 fn total_angular_momentum(entities: &[VerifiableEntity]) -> (f64, f64, f64) {
     entities.iter().fold((0.0, 0.0, 0.0), |(lx, ly, lz), e| {
-        // L = r × p = r × (m * v)
+        // L = r � p = r � (m * v)
         let lpx = e.mass * (e.y * e.vz - e.z * e.vy);
         let lpy = e.mass * (e.z * e.vx - e.x * e.vz);
         let lpz = e.mass * (e.x * e.vy - e.y * e.vx);
@@ -221,7 +221,7 @@ fn test_two_body_problem_against_direct() {
     }
 
     // Run Barnes-Hut simulation with very small theta (should be nearly exact)
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.01, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.01, CalculateCollisions::No);
     for _ in 0..num_steps {
         tree = tree.time_step();
     }
@@ -268,7 +268,7 @@ fn test_three_body_against_direct() {
     }
 
     // Run Barnes-Hut simulation
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.05, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.05, CalculateCollisions::No);
     for _ in 0..num_steps {
         tree = tree.time_step();
     }
@@ -302,7 +302,7 @@ fn test_momentum_conservation() {
     println!("Initial momentum: {:?}, magnitude: {}", initial_momentum, initial_p_mag);
 
     let time_step = 0.1;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.2, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.2, CalculateCollisions::No);
 
     // Run simulation for several steps
     for step in 0..20 {
@@ -341,7 +341,7 @@ fn test_energy_conservation() {
     println!("Initial energy: {}", initial_energy);
 
     let time_step = 0.1;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.1, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.1, CalculateCollisions::No);
 
     // Run simulation for several steps
     for step in 0..20 {
@@ -375,7 +375,7 @@ fn test_angular_momentum_conservation() {
     println!("Initial angular momentum: {:?}", initial_l);
 
     let time_step = 0.1;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.2, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.2, CalculateCollisions::No);
 
     // Calculate magnitude for relative error
     let initial_l_mag = (initial_l.0.powi(2) + initial_l.1.powi(2) + initial_l.2.powi(2)).sqrt();
@@ -414,7 +414,7 @@ fn test_stationary_particles() {
     ];
 
     let time_step = 0.1;
-    let tree = GravTree::new(&entities, time_step, 3, 0.2, CalculateCollisions::No);
+    let tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.2, CalculateCollisions::No);
     let result = tree.time_step();
     let entities = result.as_vec();
 
@@ -447,7 +447,7 @@ fn test_circular_orbit_stability() {
     ];
 
     let time_step = 1.0;
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.1, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.1, CalculateCollisions::No);
 
     let initial_distance = r;
 
@@ -503,7 +503,7 @@ fn test_theta_accuracy_tradeoff() {
     let mut errors = Vec::new();
 
     for &theta in &theta_values {
-        let mut tree = GravTree::new(&entities, time_step, 3, theta, CalculateCollisions::No);
+        let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, theta, CalculateCollisions::No);
         tree = tree.time_step();
         let tree_entities = tree.as_vec();
 
@@ -559,7 +559,7 @@ fn test_many_body_against_direct() {
     }
 
     // Run Barnes-Hut simulation with small theta
-    let mut tree = GravTree::new(&entities, time_step, 3, 0.1, CalculateCollisions::No);
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.1, CalculateCollisions::No);
     for _ in 0..3 {
         tree = tree.time_step();
     }
@@ -581,5 +581,78 @@ fn test_many_body_against_direct() {
 
     // With 20 bodies and theta=0.1, error should be reasonable
     assert!(avg_error < 5.0, "Average error too large: {}", avg_error);
+}
+
+// Regression test for C1: Node::as_entity() must pass (..., radius, mass) in the correct
+// order to Entity::new(). The original bug swapped these two arguments, so whenever a node
+// is approximated as a point mass (Barnes-Hut), its gravitational pull used the node's
+// "super_radius" (max_range/2 + r_max) instead of its total mass.
+//
+// Layout: an asymmetric 5-body bar cluster near the origin (COM at the origin, nonzero
+// quadrupole moment) plus 5 far bodies on +x. A 5/5 median split cleanly separates the two
+// groups. A coarse tree (theta=0.5) approximates the cluster as a point mass, while a fine
+// tree (theta=1e-6) resolves it exactly. The far bodies' velocity difference between the
+// two trees is dominated by the cluster's point-mass (monopole) error.
+//
+// With the correct mass, that error is small (~1e-4). With the swapped (buggy) mass, the
+// point-mass pull is off by orders of magnitude and the error jumps to ~0.05, which is
+// ~50x larger. The bounds below separate the two regimes and also reject the vacuous case
+// where the cluster is never approximated (dv would be ~0).
+#[test]
+fn test_node_as_entity_mass_not_swapped_with_radius() {
+    // VerifiableEntity::new(x, y, z, vx, vy, vz, mass, radius)
+    let make = |x: f64, mass: f64| {
+        VerifiableEntity::new(x, 0.0, 0.0, 0.0, 0.0, 0.0, mass, 1.0)
+    };
+
+    // Asymmetric 5-body cluster (bar along x), centered at the origin.
+    let mut entities = vec![
+        make(-4.0, 100.0),
+        make(-2.0, 100.0),
+        make( 0.0, 100.0),
+        make( 2.0, 100.0),
+        make( 4.0, 100.0),
+    ];
+    // 5 far bodies on +x, all far beyond the cluster. Their own mass is kept small (1.0)
+    // so they do not strongly attract one another and fly apart during the step; their mass
+    // does not enter the cluster's point-mass error, which is what this test measures.
+    for x in [95.0, 97.0, 99.0, 101.0, 103.0] {
+        entities.push(make(x, 1.0));
+    }
+
+    let time_step = 1.0;
+
+    // Coarse tree: cluster approximated as a point mass; far subtree resolved exactly.
+    let coarse = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.5, CalculateCollisions::No)
+        .time_step();
+    // Fine tree: cluster resolved exactly (everything below the approximation threshold).
+    let fine = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 1e-6, CalculateCollisions::No)
+        .time_step();
+
+    let coarse_e = coarse.as_vec();
+    let fine_e = fine.as_vec();
+
+    // Identify the far bodies (x > 40) in both trees and pair them up by x-order.
+    let mut coarse_far: Vec<&VerifiableEntity> = coarse_e.iter().filter(|e| e.x > 40.0).collect();
+    let mut fine_far: Vec<&VerifiableEntity> = fine_e.iter().filter(|e| e.x > 40.0).collect();
+    coarse_far.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+    fine_far.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+    assert_eq!(coarse_far.len(), 5, "expected 5 far bodies in coarse tree");
+    assert_eq!(fine_far.len(), 5, "expected 5 far bodies in fine tree");
+
+    for (i, (c, f)) in coarse_far.iter().zip(fine_far.iter()).enumerate() {
+        let dv = (
+            (c.vx - f.vx) * (c.vx - f.vx)
+                + (c.vy - f.vy) * (c.vy - f.vy)
+                + (c.vz - f.vz) * (c.vz - f.vz)
+        ).sqrt();
+        assert!(
+            dv >= 1e-5 && dv <= 1e-3,
+            "far body {}: |dv| = {} outside [1e-5, 1e-3]. \
+             Too small -> cluster was never approximated (vacuous test). \
+             Too large -> Node::as_entity swapped radius and mass (C1).",
+            i, dv,
+        );
+    }
 }
 

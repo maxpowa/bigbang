@@ -1,4 +1,4 @@
-﻿extern crate bigbang;
+extern crate bigbang;
 use bigbang::{AsEntity, GravTree, Responsive, SimulationResult};
 
 #[derive(Clone, PartialEq)]
@@ -15,16 +15,16 @@ struct Entity {
 
 impl AsEntity for Entity {
     fn as_entity(&self) -> bigbang::Entity {
-        bigbang::Entity {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            vx: self.vx,
-            vy: self.vy,
-            vz: self.vz,
-            radius: self.radius,
-            mass: self.mass,
-        }
+        bigbang::Entity::new(
+            self.vx,
+            self.vy,
+            self.vz,
+            self.x,
+            self.y,
+            self.z,
+            self.radius,
+            self.mass,
+        )
     }
 }
 
@@ -74,7 +74,7 @@ fn main() {
     }
 
     // Create a mutable tree for in-place updates
-    let mut test_tree = GravTree::new(
+    let mut test_tree = GravTree::with_default_parallel_threshold(
         &mut vec_that_wants_to_be_a_kdtree,
         0.2,
         3,

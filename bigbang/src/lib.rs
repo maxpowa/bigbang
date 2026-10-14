@@ -16,7 +16,7 @@ use node::Node;
 pub use as_entity::AsEntity;
 pub use bigbang_derive::AsEntity;
 pub use entity::{CalculateCollisions, Entity};
-pub use grav_tree::GravTree;
+pub use grav_tree::{GravTree, DEFAULT_PARALLEL_THRESHOLD};
 pub use responsive::Responsive;
 pub use simulation_result::SimulationResult;
 pub mod collisions;

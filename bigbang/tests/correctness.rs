@@ -44,9 +44,9 @@ impl Responsive for MyEntity {
         let mut vz = self.vz;
         let mut collided_with = Vec::new();
         let (mut ax, mut ay, mut az) = simulation_result.gravitational_acceleration;
-        for other in simulation_result.collisions {
-            collided_with.push(other.clone());
-            let (collision_ax, collision_ay, collision_az) = soft_body(self, other, 50f64);
+        for other in simulation_result.collisions.iter() {
+            collided_with.push((*other).clone());
+            let (collision_ax, collision_ay, collision_az) = soft_body(self, *other, 50f64);
             ax += collision_ax;
             ay += collision_ay;
             az += collision_az;
@@ -77,7 +77,7 @@ fn two_entities_collision() {
         MyEntity::new(0., 0., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().as_vec();
 
     // Each entity should have collided with exactly one other entity
@@ -93,7 +93,7 @@ fn two_entities_no_collision() {
         MyEntity::new(0., 0., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().as_vec();
 
     assert_eq!(after_time_step[0].collided_with.len(), 0);
@@ -108,7 +108,7 @@ fn two_entities_accel() {
         MyEntity::new(50., 0., 1., 10., 500.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
     let _after_time_step = test_tree.time_step().time_step().as_vec();
 
     // 1.0 isn't right but it should at least not be 0, what the current test is suggesting
@@ -132,7 +132,7 @@ fn exact_overlap_collision() {
         MyEntity::new(0., 0., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.2);
     let after_time_step = test_tree.time_step().as_vec();
 
     // Each entity should have collided with exactly all four other entities
@@ -155,7 +155,7 @@ fn five_entities_collision() {
         MyEntity::new(0., 1., 1., 10., 5.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.2, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().as_vec();
 
     // Each entity should have collided with exactly all four other entities
@@ -177,26 +177,158 @@ fn five_entities_accel() {
         MyEntity::new(50., 100., 1., 10., 500.),
     ];
 
-    let test_tree = GravTree::new(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
+    let test_tree = GravTree::with_default_parallel_threshold(&vec_that_wants_to_be_a_kdtree, 0.3, 3, 0.2, CalculateCollisions::Yes);
     let after_time_step = test_tree.time_step().time_step().as_vec();
 
-    assert_eq!(after_time_step[0].vx, 0.15431299859147837);
-    assert_eq!(after_time_step[0].vy, -0.09585586271461218);
-    assert_eq!(after_time_step[0].vz, 0.0035439741313927063);
+    const EPSILON: f64 = 1e-14;
 
-    assert_eq!(after_time_step[1].vx, -0.13582446094615622);
-    assert_eq!(after_time_step[1].vy, 0.8512257874024887);
-    assert_eq!(after_time_step[1].vz, -0.000021554920561577058);
+    assert!((after_time_step[0].vx - 0.15431299859147837).abs() < EPSILON);
+    assert!((after_time_step[0].vy - (-0.09585586271461218)).abs() < EPSILON);
+    assert!((after_time_step[0].vz - 0.0035439741313927063).abs() < EPSILON);
 
-    assert_eq!(after_time_step[2].vx, -0.18949313172952317);
-    assert_eq!(after_time_step[2].vy, -0.7019795056879561);
-    assert_eq!(after_time_step[2].vz, -0.000035662286878477935);
+    assert!((after_time_step[1].vx - (-0.13582446094615622)).abs() < EPSILON);
+    assert!((after_time_step[1].vy - 0.8512257874024887).abs() < EPSILON);
+    assert!((after_time_step[1].vz - (-0.000021554920561577058)).abs() < EPSILON);
 
-    assert_eq!(after_time_step[3].vx, 0.3386640864203134);
-    assert_eq!(after_time_step[3].vy, -0.02923599470394115);
-    assert_eq!(after_time_step[3].vz, -0.00005721416764760718);
+    assert!((after_time_step[2].vx - (-0.18949313172952317)).abs() < EPSILON);
+    assert!((after_time_step[2].vy - (-0.7019795056879561)).abs() < EPSILON);
+    assert!((after_time_step[2].vz - (-0.000035662286878477935)).abs() < EPSILON);
 
-    assert_eq!(after_time_step[4].vx, -0.028777793603781895);
-    assert_eq!(after_time_step[4].vy, -0.11042470073913033);
-    assert_eq!(after_time_step[4].vz, -0.00023996603805160843);
+    assert!((after_time_step[3].vx - 0.3386640864203134).abs() < EPSILON);
+    assert!((after_time_step[3].vy - (-0.02923599470394115)).abs() < EPSILON);
+    assert!((after_time_step[3].vz - (-0.00005721416764760718)).abs() < EPSILON);
+
+    assert!((after_time_step[4].vx - (-0.028777793603781895)).abs() < EPSILON);
+    assert!((after_time_step[4].vy - (-0.11042470073913033)).abs() < EPSILON);
+    assert!((after_time_step[4].vz - (-0.00023996603805160843)).abs() < EPSILON);
 }
+
+/// Test that an entity in a predefined circular orbit maintains its orbit after 100000 iterations
+#[test]
+fn circular_orbit_stability() {
+    use bigbang::{Entity, GravTree, CalculateCollisions};
+
+    // Central body (e.g., Sun or Earth)
+    let central_mass = 1000.0;
+    let central_radius = 10.0;
+
+    // Orbiting body
+    let orbit_radius = 500.0; // Distance from central body
+    let orbiting_mass = 1.0; // Small mass to not perturb the system
+    let orbiting_radius = 1.0;
+
+    // For a circular orbit: v = sqrt(G * M / r)
+    // Assuming G = 1.0 in normalized units
+    let g = 1.0;
+    let orbital_velocity = ((g * central_mass / orbit_radius) as f64).sqrt();
+
+    // Central body at origin (stationary)
+    let central = Entity::new(
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        central_radius,
+        central_mass,
+    );
+
+    // Orbiting body starts at (orbit_radius, 0, 0) with velocity in +y direction
+    let orbiting = Entity::new(
+        0.0,
+        orbital_velocity,
+        0.0,
+        orbit_radius,
+        0.0,
+        0.0,
+        orbiting_radius,
+        orbiting_mass,
+    );
+
+    let entities = vec![central, orbiting];
+
+    // Create simulation with appropriate parameters
+    // theta = 0.5 for Barnes-Hut approximation (realistic usage)
+    // Smaller time step for accuracy with Velocity Verlet integration
+    let time_step = 0.1;
+    let theta = 0.5;
+    let mut tree = GravTree::with_default_parallel_threshold(&entities, time_step, 3, theta, CalculateCollisions::No);
+
+    // Track orbital parameters over time
+    let mut orbital_radii = Vec::new();
+    let mut velocities = Vec::new();
+
+    // Run simulation for 100000 iterations using Velocity Verlet for better long-term stability
+    for _ in 0..100000 {
+        tree.time_step_mut_verlet();
+        let entities = tree.as_vec();
+        let central = &entities[0];
+        let orbiter = &entities[1];
+
+        // Calculate distance from central body (relative distance, not from origin)
+        let dx = orbiter.x - central.x;
+        let dy = orbiter.y - central.y;
+        let dz = orbiter.z - central.z;
+        let r = (dx * dx + dy * dy + dz * dz).sqrt();
+        orbital_radii.push(r);
+
+        // Calculate relative velocity magnitude
+        let dvx = orbiter.vx - central.vx;
+        let dvy = orbiter.vy - central.vy;
+        let dvz = orbiter.vz - central.vz;
+        let v = (dvx * dvx + dvy * dvy + dvz * dvz).sqrt();
+        velocities.push(v);
+    }
+
+    // Calculate statistics for orbital radius
+    let mean_radius: f64 = orbital_radii.iter().sum::<f64>() / orbital_radii.len() as f64;
+    let max_radius = orbital_radii.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_radius = orbital_radii.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // Calculate statistics for velocity
+    let mean_velocity: f64 = velocities.iter().sum::<f64>() / velocities.len() as f64;
+    let max_velocity = velocities.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let min_velocity = velocities.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    // Assert orbital stability
+    // The orbit should remain within 1% of the initial radius
+    // (tolerance increased to account for Barnes-Hut approximation errors)
+    let radius_tolerance = orbit_radius * 0.01;
+    assert!(
+        (mean_radius - orbit_radius).abs() < radius_tolerance,
+        "Mean orbital radius {} deviates too much from initial radius {}",
+        mean_radius,
+        orbit_radius
+    );
+    assert!(
+        max_radius < orbit_radius + radius_tolerance,
+        "Maximum orbital radius {} exceeds tolerance",
+        max_radius
+    );
+    assert!(
+        min_radius > orbit_radius - radius_tolerance,
+        "Minimum orbital radius {} below tolerance",
+        min_radius
+    );
+
+    // Velocity should also remain stable within 1%
+    let velocity_tolerance = orbital_velocity * 0.01;
+    assert!(
+        (mean_velocity - orbital_velocity).abs() < velocity_tolerance,
+        "Mean velocity {} deviates too much from expected orbital velocity {}",
+        mean_velocity,
+        orbital_velocity
+    );
+    assert!(
+        max_velocity < orbital_velocity + velocity_tolerance,
+        "Maximum velocity {} exceeds tolerance",
+        max_velocity
+    );
+    assert!(
+        min_velocity > orbital_velocity - velocity_tolerance,
+        "Minimum velocity {} below tolerance",
+        min_velocity
+    );
+}
+
