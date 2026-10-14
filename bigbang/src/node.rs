@@ -109,6 +109,7 @@ impl Node {
         );
         let max_dimension_range = f64::max(range_x, f64::max(range_y, range_z));
         let super_radius = max_dimension_range / 2f64 + self.r_max;
+        // NOTE: Entity::new takes (…, radius, mass) — do NOT swap these two arguments.
         Entity::new(
             0.0,
             0.0,
@@ -116,8 +117,8 @@ impl Node {
             self.center_of_mass.0,
             self.center_of_mass.1,
             self.center_of_mass.2,
-            self.total_mass,
             super_radius,
+            self.total_mass,
         )
     }
 

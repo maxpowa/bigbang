@@ -583,3 +583,76 @@ fn test_many_body_against_direct() {
     assert!(avg_error < 5.0, "Average error too large: {}", avg_error);
 }
 
+// Regression test for C1: Node::as_entity() must pass (..., radius, mass) in the correct
+// order to Entity::new(). The original bug swapped these two arguments, so whenever a node
+// is approximated as a point mass (Barnes-Hut), its gravitational pull used the node's
+// "super_radius" (max_range/2 + r_max) instead of its total mass.
+//
+// Layout: an asymmetric 5-body bar cluster near the origin (COM at the origin, nonzero
+// quadrupole moment) plus 5 far bodies on +x. A 5/5 median split cleanly separates the two
+// groups. A coarse tree (theta=0.5) approximates the cluster as a point mass, while a fine
+// tree (theta=1e-6) resolves it exactly. The far bodies' velocity difference between the
+// two trees is dominated by the cluster's point-mass (monopole) error.
+//
+// With the correct mass, that error is small (~1e-4). With the swapped (buggy) mass, the
+// point-mass pull is off by orders of magnitude and the error jumps to ~0.05, which is
+// ~50x larger. The bounds below separate the two regimes and also reject the vacuous case
+// where the cluster is never approximated (dv would be ~0).
+#[test]
+fn test_node_as_entity_mass_not_swapped_with_radius() {
+    // VerifiableEntity::new(x, y, z, vx, vy, vz, mass, radius)
+    let make = |x: f64, mass: f64| {
+        VerifiableEntity::new(x, 0.0, 0.0, 0.0, 0.0, 0.0, mass, 1.0)
+    };
+
+    // Asymmetric 5-body cluster (bar along x), centered at the origin.
+    let mut entities = vec![
+        make(-4.0, 100.0),
+        make(-2.0, 100.0),
+        make( 0.0, 100.0),
+        make( 2.0, 100.0),
+        make( 4.0, 100.0),
+    ];
+    // 5 far bodies on +x, all far beyond the cluster. Their own mass is kept small (1.0)
+    // so they do not strongly attract one another and fly apart during the step; their mass
+    // does not enter the cluster's point-mass error, which is what this test measures.
+    for x in [95.0, 97.0, 99.0, 101.0, 103.0] {
+        entities.push(make(x, 1.0));
+    }
+
+    let time_step = 1.0;
+
+    // Coarse tree: cluster approximated as a point mass; far subtree resolved exactly.
+    let coarse = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 0.5, CalculateCollisions::No)
+        .time_step();
+    // Fine tree: cluster resolved exactly (everything below the approximation threshold).
+    let fine = GravTree::with_default_parallel_threshold(&entities, time_step, 3, 1e-6, CalculateCollisions::No)
+        .time_step();
+
+    let coarse_e = coarse.as_vec();
+    let fine_e = fine.as_vec();
+
+    // Identify the far bodies (x > 40) in both trees and pair them up by x-order.
+    let mut coarse_far: Vec<&VerifiableEntity> = coarse_e.iter().filter(|e| e.x > 40.0).collect();
+    let mut fine_far: Vec<&VerifiableEntity> = fine_e.iter().filter(|e| e.x > 40.0).collect();
+    coarse_far.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+    fine_far.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+    assert_eq!(coarse_far.len(), 5, "expected 5 far bodies in coarse tree");
+    assert_eq!(fine_far.len(), 5, "expected 5 far bodies in fine tree");
+
+    for (i, (c, f)) in coarse_far.iter().zip(fine_far.iter()).enumerate() {
+        let dv = (
+            (c.vx - f.vx) * (c.vx - f.vx)
+                + (c.vy - f.vy) * (c.vy - f.vy)
+                + (c.vz - f.vz) * (c.vz - f.vz)
+        ).sqrt();
+        assert!(
+            dv >= 1e-5 && dv <= 1e-3,
+            "far body {}: |dv| = {} outside [1e-5, 1e-3]. \
+             Too small -> cluster was never approximated (vacuous test). \
+             Too large -> Node::as_entity swapped radius and mass (C1).",
+            i, dv,
+        );
+    }
+}
+

@@ -250,9 +250,11 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             self.rebuild_tree();
         }
 
-        // Calculate accelerations for all entities in parallel
-        // We extract just the acceleration values to avoid lifetime issues with SimulationResult
-        let accelerations: Vec<(f64, f64, f64)> = self.entities
+        // Calculate accelerations (and collisions, when enabled) for all entities in parallel.
+        // We clone the colliding entities out of the arena because the phase below mutates the
+        // arena in place, and the arena cannot be shared- and mutably borrowed at the same time.
+        // This mirrors the immutable `time_step()` path, which applies collisions via `respond()`.
+        let per_entity: Vec<((f64, f64, f64), Vec<T>)> = self.entities
             .par_iter()
             .map(|entity| {
                 let entity_as_entity = entity.as_entity();
@@ -264,19 +266,22 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
                         entity_as_entity.get_acceleration_without_collisions(&self.root, &self.entities, self.theta)
                     }
                 };
-                result.gravitational_acceleration
+                (
+                    result.gravitational_acceleration,
+                    result.collisions.into_iter().map(|other| other.clone()).collect(),
+                )
             })
             .collect();
+        let (accelerations, collisions): (Vec<_>, Vec<_>) = per_entity.into_iter().unzip();
 
-        // Apply accelerations to entities in parallel using respond_mut (TRUE ZERO-COPY!)
-        // We create SimulationResults on the fly with empty collision vectors
+        // Apply accelerations AND collisions to entities in parallel using respond_mut
+        use crate::SimulationResult;
         self.entities
             .par_iter_mut()
-            .zip(accelerations.par_iter())
-            .for_each(|(entity, &accel)| {
-                use crate::SimulationResult;
+            .zip(accelerations.par_iter().zip(collisions.par_iter()))
+            .for_each(|(entity, (&accel, collisions))| {
                 let sim_result = SimulationResult {
-                    collisions: Vec::new(),
+                    collisions: collisions.iter().collect(),
                     gravitational_acceleration: accel,
                 };
                 entity.respond_mut(sim_result, self.time_step);
@@ -323,8 +328,10 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             self.rebuild_tree();
         }
 
-        // STEP 1: Calculate accelerations at current positions (t)
-        let accelerations_current: Vec<(f64, f64, f64)> = self.entities
+        // STEP 1: Calculate accelerations (and collisions, when enabled) at current positions (t).
+        // Colliding entities are cloned out of the arena since STEP 4 mutates it in place;
+        // this mirrors the immutable `time_step()` path, which applies collisions via `respond()`.
+        let per_entity_current: Vec<((f64, f64, f64), Vec<T>)> = self.entities
             .par_iter()
             .map(|entity| {
                 let entity_as_entity = entity.as_entity();
@@ -336,9 +343,13 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
                         entity_as_entity.get_acceleration_without_collisions(&self.root, &self.entities, self.theta)
                     }
                 };
-                result.gravitational_acceleration
+                (
+                    result.gravitational_acceleration,
+                    result.collisions.into_iter().map(|other| other.clone()).collect(),
+                )
             })
             .collect();
+        let (accelerations_current, collisions_current): (Vec<_>, Vec<_>) = per_entity_current.into_iter().unzip();
 
         // STEP 2: Predict positions at t+dt for second acceleration evaluation
         // Create temporary predicted entities for tree rebuild
@@ -378,21 +389,24 @@ impl<T: AsEntity + Responsive + Clone + Send + Sync> GravTree<T> {
             })
             .collect();
 
-        // STEP 4: Apply Verlet integration using both current and next accelerations
+        // STEP 4: Apply Verlet integration using both current and next accelerations.
+        // Collision response uses the CURRENT-timestep collision list (cloned out in STEP 1),
+        // matching the immutable path. The next-timestep result is evaluated against the
+        // temporary predicted tree (a different entity set), so its collision list is not
+        // carried through; `respond_mut_verlet` implementations only apply current collisions.
         self.entities
             .par_iter_mut()
-            .zip(accelerations_current.par_iter().zip(accelerations_next.par_iter()))
-            .for_each(|(entity, (&accel_current, &accel_next))| {
-                // Create SimulationResults with just accelerations (no collisions for Verlet)
+            .zip(accelerations_current.par_iter().zip(accelerations_next.par_iter()).zip(collisions_current.par_iter()))
+            .for_each(|(entity, ((&accel_current, &accel_next), collisions))| {
                 let result_current_t = SimulationResult {
-                    collisions: Vec::new(),
+                    collisions: collisions.iter().collect(),
                     gravitational_acceleration: accel_current,
                 };
                 let result_next_t = SimulationResult {
                     collisions: Vec::new(),
                     gravitational_acceleration: accel_next,
                 };
-                
+
                 entity.respond_mut_verlet(result_current_t, result_next_t, self.time_step);
             });
 
